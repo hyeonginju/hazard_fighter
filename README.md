@@ -41,8 +41,13 @@ docker compose up --build
 pytest
 ```
 
-DB 없이도 도는 것: `test_risk_matrix.py`(규칙 매트릭스 로직), `test_ingestion.py`(mock fallback), `test_health.py`.
-DB 필요한 테스트는 아직 없음 — 로컬 Postgres 붙여서 추가하는 게 다음 할 일 중 하나.
+**테스트는 DB 서버(Docker/Postgres) 없이 전부 돈다.** 모델이 다이얼렉트 호환 타입(`app/models/types.py`: UUID/JSONB/ARRAY → SQLite 호환 variant)이라, 통합 테스트는 in-memory SQLite로 실제 DB 왕복까지 검증한다:
+- `test_risk_matrix.py` — Layer1 규칙 매트릭스 로직
+- `test_ingestion.py` — API 키 없을 때 mock fallback
+- `test_pipeline_e2e.py` — 사용자/인물/지역/구독 생성 → ingest → events → 위험도 평가 → notifications 생성까지 전체 흐름
+- `test_health.py` — 헬스체크
+
+운영 DDL은 Postgres를 타겟으로 하고(JSONB/네이티브 UUID 유지), 아래 Docker 절차로 실제 Postgres에 적용해 최종 확인한다.
 
 ## API 키 발급 현황
 
