@@ -31,9 +31,15 @@ def run_ingestion_cycle(db: Session) -> dict:
     ]
 
     stored_events: list[Event] = []
+    errors: dict[str, str] = {}
     for client in clients:
-        for normalized in client.fetch():
-            stored_events.append(_store_event(db, normalized))
+        # 한 소스가 실패해도(API 형식 변경, 네트워크 등) 나머지 소스는 계속 처리한다.
+        # 실패 내용은 응답의 errors 에 소스별로 담아 호출자가 바로 볼 수 있게 한다.
+        try:
+            for normalized in client.fetch():
+                stored_events.append(_store_event(db, normalized))
+        except Exception as e:  # noqa: BLE001 — 소스별 격리가 목적
+            errors[str(client.source)] = f"{type(e).__name__}: {e}"
 
     notifications_created = 0
     for event in stored_events:
@@ -42,6 +48,7 @@ def run_ingestion_cycle(db: Session) -> dict:
     return {
         "events_ingested": len(stored_events),
         "notifications_created": notifications_created,
+        "errors": errors,
     }
 
 

@@ -55,18 +55,33 @@ pytest
 |---|---|---|
 | 기상특보 조회서비스 (data.go.kr 15000415) | ✅ 발급 완료 | `.env`의 `KMA_WARNING_API_KEY` |
 | 지진정보 조회서비스 (data.go.kr 15000420) | ✅ 발급 완료 | `.env`의 `KMA_EARTHQUAKE_API_KEY` |
-| 홍수통제소 표준수문DB (hrfco.go.kr) | ⏳ 진행 중 | data.go.kr 계정과 별개로 hrfco.go.kr에서 직접 발급. 인증키 신청 시 "사이트 URL(IP)"을 요구하는데, 지금 개발 중인 컴퓨터의 공인 IP나 보유 중인 도메인(peterju.cloud)을 넣으면 됨. 배포 후 아웃바운드 IP가 바뀌면 재등록이 필요할 수 있음 (spec 12절 Open Question #8) |
-| 긴급재난문자 (safetydata.go.kr) | 미신청 | Phase 5 확장 항목이라 아직 안 급함 |
+| 홍수통제소 표준수문DB (hrfco.go.kr) | ✅ 발급 완료 | `.env`의 `HRFCO_API_KEY`. data.go.kr 계정과 별개로 hrfco.go.kr에서 직접 발급. 인증키 신청 시 "사이트 URL(IP)"을 요구하는데, 개발 중인 컴퓨터 공인 IP나 보유 도메인(peterju.cloud)을 넣으면 됨. 배포 후 아웃바운드 IP가 바뀌면 재등록 필요 가능 (spec 12절 Open Question #8) |
+| 긴급재난문자 (safetydata.go.kr) | ⏳ 진행 중 | `.env`의 `SAFETYDATA_API_KEY`. Phase 5 확장 항목이라 급하진 않음 |
+| LLM — 알림 문구 생성 (Phase 2) | ✅ 발급 완료 (OpenAI) | `.env`의 `OPENAI_API_KEY`. Anthropic 키(`ANTHROPIC_API_KEY`)로 대체 가능 — 둘 중 하나만 있으면 됨 |
+| Firebase Cloud Messaging — 웹푸시 (Phase 2) | ⏳ 미발급 | 레거시 `FCM_SERVER_KEY`는 2024.7 폐기됨. 서비스 계정 JSON 방식 사용: Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키 생성 → `secrets/firebase-service-account.json`. `.env`는 `GOOGLE_APPLICATION_CREDENTIALS`(파일 경로) + `FCM_PROJECT_ID` |
 
 키가 없는 소스는 `app/ingestion/*.py`의 `fetch()`가 자동으로 mock 데이터를 반환하므로, 키 발급을 기다리지 않고도 API/DB/위험도 로직을 계속 개발·테스트할 수 있다.
 
-## 실제 API 응답 확인하고 코드 다듬기 (다음 할 일)
+## 환경변수 & 시크릿 관리
 
-`app/ingestion/kma_warnings.py`, `kma_earthquake.py`, `hrfco_flood.py`의 `_fetch_live()`는 data.go.kr 공통 컨벤션을 가정하고 작성한 **최선 추정치**다. 키가 실제로 들어오면:
+- **`.env`** — 실제 키를 담는 파일. `.gitignore`로 무시되어 커밋되지 않는다.
+- **`.env.example`** — 커밋되는 템플릿. 변수명만 있고 값은 비어 있어야 한다. 최초 세팅은 `cp .env.example .env` 후 값 채우기.
+- **`secrets/`** — Firebase 서비스 계정 JSON 등 시크릿 파일 폴더. `.gitignore`로 무시된다.
+- 커밋 전에 `git status`로 `.env`나 `secrets/`가 스테이징에 안 걸렸는지 확인할 것.
 
-1. `POST /events/ingest`를 호출해서 실제 응답을 받아본다
-2. 응답 필드명이 코드의 TODO 주석과 다르면 `_map_warning_type()`, `_map_severity()` 등을 실제 필드에 맞게 고친다
-3. 특히 홍수통제소는 spec 12절 Open Question #6(4대강 통합 제공 여부)도 이 시점에 같이 확인
+### 시크릿 히스토리 정리 (완료)
+
+초기 개발 중 `.env.example`에 실제 키(KMA/HRFCO)가 잠깐 커밋된 적이 있었으나, 원격에 push되기 전 `git filter-repo --replace-text`로 히스토리 전체에서 스크럽 완료. 로컬 전용이었고 외부 노출 없었으므로 키 재발급은 불필요. 앞으로 GitHub(private) 연결 후 push해도 안전하다.
+
+## 실제 API 연동 상태 (2026-07-17 검증 완료)
+
+세 소스 모두 실제 응답 기준으로 `_fetch_live()`를 수정했고, `POST /events/ingest`가 실 데이터로 end-to-end 성공했다 (`events_ingested: 8, errors: {}`). 실 응답 샘플은 `debug_responses/`(gitignore됨), 재확인은 `python scripts/debug_fetch.py`.
+
+| 소스 | 상태 | 남은 것 |
+|---|---|---|
+| 기상특보 | ✅ 동작 | `getWthrWrnList`는 관서 단위라 region 매칭 불가. 시군구는 통보문 상세(`getWthrWrnMsg`, `t6` 필드) 파싱 필요 → **알림 생성으로 이어지려면 이게 다음 핵심 작업** |
+| 지진 | ✅ 동작 | 필수 파라미터 fromTmFc/toTmFc + 최대 3일 제한 반영됨. 국내 지진 발생 시 필드 재확인, 국외 지진 필터 검토 |
+| 홍수통제소 | ✅ 동작 | `api.hrfco.go.kr` 수위 임계치 판정 방식. 모니터링 관측소가 청주 2곳 하드코딩 → 구독 지역 기반 동적 선정(river_gauges 테이블 활용)은 Phase 2 |
 
 ## 왜 초기 마이그레이션이 `create_all`/`drop_all` 방식인가
 
@@ -74,6 +89,6 @@ pytest
 
 ## 다음 순서 (project-spec.md 10절 로드맵 기준)
 
-1. 홍수통제소 키 발급 완료 → 3개 소스 모두 `POST /events/ingest`로 실제 응답 확인
-2. `docker compose up -d db && alembic upgrade head`로 실제 Postgres에 스키마 생성 검증 (이 세션에서는 환경 제약으로 못 해봄)
-3. Phase 2 착수: Layer 2 LLM 판단(`ai_risk_logs`), 알림 문구 실제 LLM 생성, 웹(PWA) 구독 관리 화면, FCM 웹푸시 연동
+1. 3개 소스(기상특보/지진/홍수통제소) 키 모두 발급 완료 → `POST /events/ingest`로 실제 응답 확인하고 `_fetch_live()` 필드 매핑 다듬기
+2. `docker compose up -d db && alembic upgrade head`로 실제 Postgres에 스키마 생성 검증 (스캐폴딩 세션에서는 환경 제약으로 못 해봄)
+3. Phase 2 착수: Layer 2 LLM 판단(`ai_risk_logs`), 알림 문구 실제 LLM 생성(OpenAI 키 준비됨), 웹(PWA) 구독 관리 화면, FCM 웹푸시 연동(서비스 계정 JSON 방식)

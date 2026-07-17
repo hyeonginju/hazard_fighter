@@ -3,6 +3,7 @@ __pycache__/
 .env
 .env.local
 secrets/
+debug_responses/
 *.json.key
 .venv/
 venv/

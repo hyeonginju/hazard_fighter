@@ -3,7 +3,8 @@
 project-spec.md 6절 참고. 폭염/한파/호우/태풍/대설 등 12종 특보, 178개 시군 단위.
 회원가입 + 활용신청 승인 필요.
 """
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 UTC = timezone.utc
 
@@ -37,8 +38,15 @@ class KmaWarningClient(BaseIngestionClient):
         ]
 
     def _fetch_live(self) -> list[NormalizedEvent]:
-        # TODO: 실제 파라미터명/응답 필드는 활용가이드 문서 기준으로 검증 필요.
-        # data.go.kr 공통 컨벤션(serviceKey, pageNo, numOfRows, dataType) 기준으로 우선 작성.
+        # 실제 응답 구조 (2026-07-17 debug_responses/kma_warnings.json 로 확인):
+        #   response.body.items.item = [
+        #     {"stnId": "156", "title": "[특보] 제07-62호 : 2026.07.17.10:00 / 폭염주의보 발표 (*)",
+        #      "tmFc": 202607171000, "tmSeq": 62}, ...
+        #   ]
+        # - items 는 리스트가 아니라 {"item": [...]} 딕셔너리 (data.go.kr 공통 컨벤션)
+        # - 특보 종류/등급/조치(발표·해제)는 title 문자열 안에 들어 있어 파싱 필요
+        # - stnId 는 시군구가 아니라 발표 관서(지방기상청) 코드 → 지역 상세는
+        #   getWthrWrnMsg(통보문 상세) 연동이 따로 필요 (TODO: Phase 2)
         params = {
             "serviceKey": self.api_key,
             "pageNo": 1,
@@ -49,37 +57,62 @@ class KmaWarningClient(BaseIngestionClient):
         response.raise_for_status()
         data = response.json()
 
+        body = data.get("response", {}).get("body", {})
+        items_container = body.get("items") or {}
+        # 데이터가 없으면 items 가 빈 문자열("")로 오는 경우가 있어 방어
+        items = items_container.get("item", []) if isinstance(items_container, dict) else []
+
         events: list[NormalizedEvent] = []
-        items = data.get("response", {}).get("body", {}).get("items", [])
         for item in items:
+            parsed = _parse_title(str(item.get("title", "")))
+            if parsed is None:
+                continue  # 형식이 다른 공지 등은 스킵 (원문은 로그성 확인용)
+            kind, severity, action = parsed
+            if action == "해제":
+                continue  # 해제 공지는 신규 위험 이벤트가 아님
+            event_type = _WARNING_TYPE_MAP.get(kind)
+            if event_type is None:
+                continue  # MVP 범위 밖 특보(폭풍해일 등)는 스킵 — spec 6절 참고
             events.append(
                 NormalizedEvent(
                     source=self.source,
-                    event_type=_map_warning_type(item.get("warnVar", "")),
-                    severity=_map_severity(item.get("warnStress", "")),
-                    region_sigungu=item.get("areaName"),
-                    occurred_at=datetime.now(UTC),  # TODO: 실제 발표시각 필드로 교체
+                    event_type=event_type,
+                    severity=severity,
+                    # 지역 정보 없음: getWthrWrnList 는 관서 단위라 region 매칭 불가.
+                    # region 은 None 으로 저장되고, 알림 매칭은 통보문 상세 연동 후 가능.
+                    occurred_at=_parse_tm_fc(item.get("tmFc")),
                     raw_payload=item,
                 )
             )
         return events
 
 
-def _map_warning_type(raw: str) -> str:
-    # TODO: 실제 코드값 확인 후 매핑 완성
-    mapping = {
-        "폭염": EventType.HEATWAVE,
-        "한파": EventType.COLD_WAVE,
-        "호우": EventType.HEAVY_RAIN,
-        "태풍": EventType.TYPHOON,
-        "대설": EventType.HEAVY_SNOW,
-    }
-    return mapping.get(raw, raw)
+_WARNING_TYPE_MAP = {
+    "폭염": EventType.HEATWAVE,
+    "한파": EventType.COLD_WAVE,
+    "호우": EventType.HEAVY_RAIN,
+    "태풍": EventType.TYPHOON,
+    "대설": EventType.HEAVY_SNOW,
+}
+
+_TITLE_RE = re.compile(r"/\s*([가-힣]+?)(주의보|경보)\s*([가-힣]+)")
+
+KST = timezone(timedelta(hours=9))
 
 
-def _map_severity(raw: str) -> str:
-    if "경보" in raw:
-        return Severity.WARNING
-    if "주의보" in raw:
-        return Severity.ADVISORY
-    return raw
+def _parse_title(title: str) -> tuple[str, str, str] | None:
+    """'... / 폭염주의보 발표 (*)' → ('폭염', Severity, '발표'). 매칭 실패 시 None."""
+    m = _TITLE_RE.search(title)
+    if m is None:
+        return None
+    kind, sev_word, action = m.group(1), m.group(2), m.group(3)
+    severity = Severity.WARNING if sev_word == "경보" else Severity.ADVISORY
+    return kind, severity, action
+
+
+def _parse_tm_fc(tm_fc) -> datetime:
+    """tmFc(예: 202607171000, KST 기준)를 timezone-aware datetime 으로. 실패 시 현재 시각."""
+    try:
+        return datetime.strptime(str(tm_fc), "%Y%m%d%H%M").replace(tzinfo=KST)
+    except (ValueError, TypeError):
+        return datetime.now(UTC)
