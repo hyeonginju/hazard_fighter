@@ -5,13 +5,20 @@
 
 ## 지금 뭐가 되어 있나
 
-- FastAPI 백엔드 + PostgreSQL 스키마 (spec 9절 MVP 범위: users/persons/regions/subscriptions/events/notifications/risk_matrix/river_gauges 등 12개 테이블)
-- 위험도 판단 로직 Layer 1 (spec 4절 규칙 매트릭스) — `app/risk/matrix.py`, 테스트로 검증됨
-- 3개 데이터 소스 ingestion 클라이언트 (기상특보/지진/홍수통제소) — API 키 없으면 자동으로 mock 데이터 사용
-- 기본 REST API: 인물/지역/구독 CRUD, 이벤트 조회, 수동 ingest 트리거, 알림 조회
-- Docker Compose (Postgres + app), Alembic 마이그레이션 뼈대
+**Phase 1 완료 + Phase 2 일부 — 실데이터로 개인 맞춤 알림 생성까지 검증됨 (2026-07-17):**
 
-아직 없는 것 (다음 Phase): 실제 API 키 연동 검증, Layer 2 LLM 판단, 실제 FCM 푸시 발송, 웹 프론트, JWT 인증.
+- FastAPI 백엔드 + PostgreSQL 스키마 (spec 9절 MVP 범위: users/persons/regions/subscriptions/events/notifications/risk_matrix/river_gauges 등 12개 테이블) — 실제 Postgres(Docker)에 생성 검증
+- **실제 공공 API 3개 연동 검증 완료** (기상특보/지진/홍수통제소) — 키 없으면 자동 mock
+- **특보→지역 매칭**: 통보문 상세(`getWthrWrnMsg`)의 `t6` 스냅샷을 파싱해 특보별 시군구 추출. 이벤트 중복 방지(dedupe) 포함
+- 위험도 판단 로직 Layer 1 (spec 4절 규칙 매트릭스) — 실데이터로 "전남 광양 폭염주의보 + 고령 구독자 → HIGH 알림" 생성 확인
+- **구독 소급 평가(backfill)**: 구독을 나중에 만들어도 이미 발효 중인 특보를 즉시 평가해 알림 생성. 지역명 정규화('광양시'→'광양') 포함
+- **LLM 알림 문구 생성 + 3단계 폴백 체인**: 유료(OpenAI) → 무료(Gemini, `.env`의 `LLM_FALLBACK_*`) → 템플릿. quota 소진(429) 감지 시 해당 프로바이더 15분 쿨다운. 두 프로바이더 모두 실연동 검증됨
+- 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 33개(전부 DB 서버·외부 API 없이 돎)
+
+아직 없는 것 (다음): Layer 2 LLM 위험도 보조 판단(`ai_risk_logs`), 주기 실행(스케줄러), 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
+
+개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
 ## 로컬 실행
 
@@ -41,10 +48,13 @@ docker compose up --build
 pytest
 ```
 
-**테스트는 DB 서버(Docker/Postgres) 없이 전부 돈다.** 모델이 다이얼렉트 호환 타입(`app/models/types.py`: UUID/JSONB/ARRAY → SQLite 호환 variant)이라, 통합 테스트는 in-memory SQLite로 실제 DB 왕복까지 검증한다:
+**테스트는 DB 서버(Docker/Postgres)·외부 API 없이 전부 돈다.** 모델이 다이얼렉트 호환 타입(`app/models/types.py`: UUID/JSONB/ARRAY → SQLite 호환 variant)이라 통합 테스트는 in-memory SQLite로 실제 DB 왕복까지 검증하고, `tests/conftest.py`가 API 키를 비워 테스트는 항상 mock 을 쓴다:
 - `test_risk_matrix.py` — Layer1 규칙 매트릭스 로직
 - `test_ingestion.py` — API 키 없을 때 mock fallback
 - `test_pipeline_e2e.py` — 사용자/인물/지역/구독 생성 → ingest → events → 위험도 평가 → notifications 생성까지 전체 흐름
+- `test_warning_msg_parser.py` — 통보문 t6 파싱(실응답 케이스), 이벤트 dedupe
+- `test_subscription_backfill.py` — 구독 소급 평가, 지역명 정규화, 구독 멱등성
+- `test_message_generation.py` — LLM 폴백 체인(quota 소진 시 무료 전환·쿨다운·템플릿 폴백)
 - `test_health.py` — 헬스체크
 
 운영 DDL은 Postgres를 타겟으로 하고(JSONB/네이티브 UUID 유지), 아래 Docker 절차로 실제 Postgres에 적용해 최종 확인한다.
@@ -57,7 +67,8 @@ pytest
 | 지진정보 조회서비스 (data.go.kr 15000420) | ✅ 발급 완료 | `.env`의 `KMA_EARTHQUAKE_API_KEY` |
 | 홍수통제소 표준수문DB (hrfco.go.kr) | ✅ 발급 완료 | `.env`의 `HRFCO_API_KEY`. data.go.kr 계정과 별개로 hrfco.go.kr에서 직접 발급. 인증키 신청 시 "사이트 URL(IP)"을 요구하는데, 개발 중인 컴퓨터 공인 IP나 보유 도메인(peterju.cloud)을 넣으면 됨. 배포 후 아웃바운드 IP가 바뀌면 재등록 필요 가능 (spec 12절 Open Question #8) |
 | 긴급재난문자 (safetydata.go.kr) | ⏳ 진행 중 | `.env`의 `SAFETYDATA_API_KEY`. Phase 5 확장 항목이라 급하진 않음 |
-| LLM — 알림 문구 생성 (Phase 2) | ✅ 발급 완료 (OpenAI) | `.env`의 `OPENAI_API_KEY`. Anthropic 키(`ANTHROPIC_API_KEY`)로 대체 가능 — 둘 중 하나만 있으면 됨 |
+| LLM 유료 — 알림 문구 생성 | ✅ 발급·충전 완료 (OpenAI) | `.env`의 `OPENAI_API_KEY`. 선불 크레딧 필요(없으면 insufficient_quota → 자동으로 폴백 체인 작동) |
+| LLM 무료 폴백 (Gemini) | ✅ 발급 완료 | `.env`의 `LLM_FALLBACK_*` 3종. aistudio.google.com/apikey 에서 무료 발급. 모델명은 `gemini-flash-lite-latest` 같은 "latest" 별칭 권장 — 구버전 모델명은 무료 티어가 닫히면 `limit: 0` 429 가 남 |
 | Firebase Cloud Messaging — 웹푸시 (Phase 2) | ⏳ 미발급 | 레거시 `FCM_SERVER_KEY`는 2024.7 폐기됨. 서비스 계정 JSON 방식 사용: Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키 생성 → `secrets/firebase-service-account.json`. `.env`는 `GOOGLE_APPLICATION_CREDENTIALS`(파일 경로) + `FCM_PROJECT_ID` |
 
 키가 없는 소스는 `app/ingestion/*.py`의 `fetch()`가 자동으로 mock 데이터를 반환하므로, 키 발급을 기다리지 않고도 API/DB/위험도 로직을 계속 개발·테스트할 수 있다.
@@ -75,13 +86,14 @@ pytest
 
 ## 실제 API 연동 상태 (2026-07-17 검증 완료)
 
-세 소스 모두 실제 응답 기준으로 `_fetch_live()`를 수정했고, `POST /events/ingest`가 실 데이터로 end-to-end 성공했다 (`events_ingested: 8, errors: {}`). 실 응답 샘플은 `debug_responses/`(gitignore됨), 재확인은 `python scripts/debug_fetch.py`.
+세 소스 모두 실제 응답 기준으로 연동 완료. `POST /events/ingest` → 특보-지역 매칭 → 위험도 평가 → 알림 생성(LLM 문구)까지 실데이터로 end-to-end 검증됐다. 실 응답 샘플은 `debug_responses/`(gitignore됨), 재확인은 `python scripts/debug_fetch.py`.
 
 | 소스 | 상태 | 남은 것 |
 |---|---|---|
-| 기상특보 | ✅ 동작 | `getWthrWrnList`는 관서 단위라 region 매칭 불가. 시군구는 통보문 상세(`getWthrWrnMsg`, `t6` 필드) 파싱 필요 → **알림 생성으로 이어지려면 이게 다음 핵심 작업** |
+| 기상특보 | ✅ 지역 매칭까지 동작 | 통보문 상세(`getWthrWrnMsg`) `t6` 스냅샷 파싱으로 시군구 추출. 남은 것: 지역명 표기 정규화 고도화(행정구역 코드 기반) |
 | 지진 | ✅ 동작 | 필수 파라미터 fromTmFc/toTmFc + 최대 3일 제한 반영됨. 국내 지진 발생 시 필드 재확인, 국외 지진 필터 검토 |
 | 홍수통제소 | ✅ 동작 | `api.hrfco.go.kr` 수위 임계치 판정 방식. 모니터링 관측소가 청주 2곳 하드코딩 → 구독 지역 기반 동적 선정(river_gauges 테이블 활용)은 Phase 2 |
+| LLM (알림 문구) | ✅ 폴백 체인까지 동작 | OpenAI·Gemini 모두 실연동 검증. 남은 것: Layer 2 위험도 보조 판단에 재사용 |
 
 ## 왜 초기 마이그레이션이 `create_all`/`drop_all` 방식인가
 
@@ -89,6 +101,7 @@ pytest
 
 ## 다음 순서 (project-spec.md 10절 로드맵 기준)
 
-1. 3개 소스(기상특보/지진/홍수통제소) 키 모두 발급 완료 → `POST /events/ingest`로 실제 응답 확인하고 `_fetch_live()` 필드 매핑 다듬기
-2. `docker compose up -d db && alembic upgrade head`로 실제 Postgres에 스키마 생성 검증 (스캐폴딩 세션에서는 환경 제약으로 못 해봄)
-3. Phase 2 착수: Layer 2 LLM 판단(`ai_risk_logs`), 알림 문구 실제 LLM 생성(OpenAI 키 준비됨), 웹(PWA) 구독 관리 화면, FCM 웹푸시 연동(서비스 계정 JSON 방식)
+1. ~~실제 API 응답 확인·매핑~~ ✅ / ~~실제 Postgres 검증~~ ✅ / ~~알림 문구 LLM + 폴백 체인~~ ✅ (2026-07-17)
+2. **Layer 2 LLM 위험도 보조 판단** — 규칙 매트릭스가 못 잡는(None) 케이스를 LLM으로 판단, `ai_risk_logs`에 기록. 문구 생성과 같은 폴백 체인 재사용
+3. **주기 실행** — 지금은 수동 `POST /events/ingest` → 스케줄러로 10분 주기 자동 수집
+4. FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
