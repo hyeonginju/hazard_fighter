@@ -20,8 +20,15 @@ class Settings(BaseSettings):
 
     # LLM (Phase 2 - 위험도 판단 로직 4절 Layer 2, 알림 문구 생성용)
     openai_api_key: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"  # OpenAI 호환이면 교체 가능 (Ollama 등)
     openai_model: str = "gpt-4o-mini"  # 문구 생성용 — 저렴·빠름. 필요 시 .env 로 교체
     anthropic_api_key: str | None = None
+
+    # LLM 폴백 프로바이더 (유료 quota 소진 시 자동 전환 — 선택사항)
+    # OpenAI 호환 API 면 무엇이든 가능: Gemini(OpenAI 호환 엔드포인트), Groq, OpenRouter, Ollama 등
+    llm_fallback_base_url: str | None = None
+    llm_fallback_api_key: str | None = None
+    llm_fallback_model: str | None = None
 
     # 푸시 알림 (Phase 2 - 7절 알림 채널 전략)
     fcm_server_key: str | None = None
