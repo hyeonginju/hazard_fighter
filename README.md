@@ -5,7 +5,7 @@
 
 ## 지금 뭐가 되어 있나
 
-**Phase 1 완료 + Phase 2 일부 — 실데이터로 개인 맞춤 알림 생성까지 검증됨 (2026-07-17):**
+**Phase 1 완료 + Phase 2 일부 — 실데이터로 개인 맞춤 알림 생성까지 검증됨 (2026-07-17~19):**
 
 - FastAPI 백엔드 + PostgreSQL 스키마 (spec 9절 MVP 범위: users/persons/regions/subscriptions/events/notifications/risk_matrix/river_gauges 등 12개 테이블) — 실제 Postgres(Docker)에 생성 검증
 - **실제 공공 API 3개 연동 검증 완료** (기상특보/지진/홍수통제소) — 키 없으면 자동 mock
@@ -84,7 +84,7 @@ pytest
 
 초기 개발 중 `.env.example`에 실제 키(KMA/HRFCO)가 잠깐 커밋된 적이 있었으나, 원격에 push되기 전 `git filter-repo --replace-text`로 히스토리 전체에서 스크럽 완료. 로컬 전용이었고 외부 노출 없었으므로 키 재발급은 불필요. 앞으로 GitHub(private) 연결 후 push해도 안전하다.
 
-## 실제 API 연동 상태 (2026-07-17 검증 완료)
+## 실제 API 연동 상태 (2026-07-17~19 검증 완료)
 
 세 소스 모두 실제 응답 기준으로 연동 완료. `POST /events/ingest` → 특보-지역 매칭 → 위험도 평가 → 알림 생성(LLM 문구)까지 실데이터로 end-to-end 검증됐다. 실 응답 샘플은 `debug_responses/`(gitignore됨), 재확인은 `python scripts/debug_fetch.py`.
 
@@ -101,7 +101,7 @@ pytest
 
 ## 다음 순서 (project-spec.md 10절 로드맵 기준)
 
-1. ~~실제 API 응답 확인·매핑~~ ✅ / ~~실제 Postgres 검증~~ ✅ / ~~알림 문구 LLM + 폴백 체인~~ ✅ (2026-07-17)
+1. ~~실제 API 응답 확인·매핑~~ ✅ / ~~실제 Postgres 검증~~ ✅ (07-17) / ~~알림 문구 LLM + 폴백 체인~~ ✅ (07-19)
 2. **Layer 2 LLM 위험도 보조 판단** — 규칙 매트릭스가 못 잡는(None) 케이스를 LLM으로 판단, `ai_risk_logs`에 기록. 문구 생성과 같은 폴백 체인 재사용
 3. **주기 실행** — 지금은 수동 `POST /events/ingest` → 스케줄러로 10분 주기 자동 수집
 4. FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
