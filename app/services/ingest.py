@@ -31,36 +31,61 @@ def run_ingestion_cycle(db: Session) -> dict:
     ]
 
     stored_events: list[Event] = []
+    duplicates_skipped = 0
     errors: dict[str, str] = {}
     for client in clients:
         # 한 소스가 실패해도(API 형식 변경, 네트워크 등) 나머지 소스는 계속 처리한다.
         # 실패 내용은 응답의 errors 에 소스별로 담아 호출자가 바로 볼 수 있게 한다.
         try:
             for normalized in client.fetch():
-                stored_events.append(_store_event(db, normalized))
+                event, created = _store_event(db, normalized)
+                if created:
+                    stored_events.append(event)
+                else:
+                    duplicates_skipped += 1
         except Exception as e:  # noqa: BLE001 — 소스별 격리가 목적
             errors[str(client.source)] = f"{type(e).__name__}: {e}"
 
     notifications_created = 0
-    for event in stored_events:
+    for event in stored_events:  # 신규 이벤트만 평가 — 중복 알림 방지
         notifications_created += _evaluate_and_notify(db, event)
 
     return {
         "events_ingested": len(stored_events),
+        "duplicates_skipped": duplicates_skipped,
         "notifications_created": notifications_created,
         "errors": errors,
     }
 
 
-def _store_event(db: Session, normalized: NormalizedEvent) -> Event:
+def _store_event(db: Session, normalized: NormalizedEvent) -> tuple[Event, bool]:
+    """이벤트 저장. 이미 같은 이벤트가 있으면 재사용하고 created=False 반환.
+
+    특보 통보문의 t6 는 "발효 중 특보 스냅샷"이라 같은 특보가 매 ingest 사이클 반복된다.
+    (source, event_type, severity, region, occurred_at=발표시각) 이 모두 같으면 동일 이벤트로
+    간주해 중복 저장·중복 알림을 막는다. 새 통보문이 나오면 occurred_at 이 바뀌므로 새 이벤트가 된다.
+    """
     region = None
     if normalized.region_sido and normalized.region_sigungu:
         region = get_or_create_region(db, normalized.region_sido, normalized.region_sigungu, None)
+    region_id = region.id if region else None
+
+    existing = db.scalar(
+        select(Event).where(
+            Event.source == normalized.source,
+            Event.event_type == normalized.event_type,
+            Event.severity == normalized.severity,
+            Event.region_id == region_id,
+            Event.occurred_at == normalized.occurred_at,
+        )
+    )
+    if existing is not None:
+        return existing, False
 
     event = Event(
         source=normalized.source,
         event_type=normalized.event_type,
-        region_id=region.id if region else None,
+        region_id=region_id,
         severity=normalized.severity,
         raw_payload=normalized.raw_payload,
         occurred_at=normalized.occurred_at,
@@ -68,7 +93,7 @@ def _store_event(db: Session, normalized: NormalizedEvent) -> Event:
     db.add(event)
     db.commit()
     db.refresh(event)
-    return event
+    return event, True
 
 
 def _evaluate_and_notify(db: Session, event: Event) -> int:

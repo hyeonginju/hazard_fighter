@@ -493,12 +493,31 @@ git filter-repo --replace-text .secret-replacements.txt --force
 
 **결과.** `POST /events/ingest` → `{"events_ingested": 8, "notifications_created": 0, "errors": {}}`. 실제 공공 API 3개 → 정규화 → Postgres 저장까지 전체 파이프라인이 처음으로 끝까지 돌았다. 알림 0은 특보 이벤트에 region이 아직 없어서(통보문 상세 연동 전)이며 예상된 동작.
 
+### 2026-07-17 (저녁) — 특보→지역 매칭, 실데이터 알림 생성 성공 🎉
+
+**통보문 상세(getWthrWrnMsg) 연동.** 특보 클라이언트를 발표 이력 목록(getWthrWrnList)에서 통보문 상세 기반으로 전환. 핵심 발견: 최신 통보문의 `t6` 필드가 "이 시점 발효 중인 특보 전체 + 지역" 스냅샷이라, 이거 하나만 파싱하면 현재 상황을 다 얻는다.
+
+**텍스트 파싱의 현실.** 지역이 구조화된 필드가 아니라 자연어에 가까운 텍스트로 온다: `충청남도(보령(도서제외), 보령도서)`, `제주도(제주도산지, 추자도 제외)`, `인천`(하위구역 없음). 괄호 깊이를 추적하는 스플리터(`_split_top_level`)를 직접 짜서 해결 — 중첩 괄호 한정어 제거('보령(도서제외)'→'보령'), '제외' 항목 스킵, 시도 단위는 sigungu='전체'. 실제 응답 케이스를 그대로 테스트로 박아뒀다(test_warning_msg_parser.py).
+
+**이벤트 중복 방지(dedupe).** t6는 스냅샷이라 같은 특보가 매 사이클 반복 유입된다. (소스·종류·등급·지역·발표시각)이 같으면 기존 이벤트를 재사용하고 알림 평가를 건너뛰게 해서 중복 알림을 차단. 응답에 `duplicates_skipped`로 노출.
+
+**끝까지 도는 순간.** 지역 생성 → 구독 생성 → ingest 순서로 실행하니:
+`{"events_ingested": 63, "duplicates_skipped": 1, "notifications_created": 1}` →
+`"[폭염특보] 전라남도 광양에 이상상황이 감지됐어요. 어머니님 관련 주의가 필요해요"` (HIGH, matrix).
+**공공 API → 텍스트 파싱 → 지역 매칭 → 규칙 매트릭스 → 개인 맞춤 알림**까지, 프로젝트의 핵심 가설이 실데이터로 처음 검증됐다.
+
+**과정에서 배운 것.** (1) 422 에러 = 요청 JSON 검증 실패 — placeholder를 실제 UUID로 안 바꾸면 난다. (2) "구독을 먼저, ingest를 나중에" — 알림 평가는 이벤트 생성 시점에만 돌기 때문. 이건 나중에 "구독 생성 시 기존 발효 특보 소급 평가" 기능으로 개선할 만하다(TODO). (3) 개발 중 데이터 리셋은 `docker compose exec db psql`로 직접 DELETE.
+
 ---
 
 ## Part 5. 아직 안 한 것 / 다음 (Phase 2+)
 
-- **실제 API 응답 대조.** `_fetch_live()`는 data.go.kr 공통 컨벤션을 가정한 추정치다. 키가 실제로 도니, `POST /events/ingest`로 실제 응답을 받아 필드 매핑(`_map_warning_type` 등)을 실 응답에 맞게 고쳐야 한다.
-- **실제 Postgres 검증.** `docker compose up -d db && alembic upgrade head`로 실제 Postgres에 스키마를 올려 최종 확인. (지금까진 SQLite/컴파일 확인만.)
+- ~~실제 API 응답 대조~~ ✅ 2026-07-17 완료 (Part 4 일지 참고)
+- ~~실제 Postgres 검증~~ ✅ 2026-07-17 완료 — Docker Postgres에 스키마 생성 + 실데이터 저장 확인
+- ~~특보 통보문 상세(`getWthrWrnMsg`) 연동~~ ✅ 2026-07-17 완료 — 실데이터 알림 생성까지 검증 (Part 4 일지 참고)
+- **구독 생성 시 소급 평가.** 지금은 이벤트 생성 시점에만 알림 평가 → 구독을 나중에 만들면 이미 발효 중인 특보를 놓친다. 구독 생성 시 활성 이벤트를 소급 평가하는 로직 검토.
+- **지역명 정규화.** 통보문의 지역명(광양, 보령)과 사용자가 등록할 지역명(광양시, 보령시)이 다를 수 있다 → 매칭 실패 가능. 표준 행정구역 코드 기반 정규화 검토.
+- **홍수 관측소 동적 선정.** 지금은 청주 2곳 하드코딩 → 구독 지역 기반으로 river_gauges/gauge_region_maps 테이블 활용.
 - **Layer 2 (LLM).** 규칙에 안 걸리는 케이스를 LLM으로 판단하고 `ai_risk_logs`에 기록. 알림 문구도 템플릿 → LLM 생성으로 교체.
 - **웹 프론트(PWA)** 구독 관리 화면.
 - **FCM 웹푸시** 실제 발송(서비스 계정 JSON 방식). `app/config.py`의 설정도 `fcm_server_key` → `GOOGLE_APPLICATION_CREDENTIALS`/`FCM_PROJECT_ID`로 맞춰줄 것(현재는 .env만 바뀌고 config는 레거시 필드가 남아 있음 — 작은 정리 항목).
@@ -542,4 +561,4 @@ git filter-repo --replace-text .secret-replacements.txt --force
 
 ---
 
-*마지막 업데이트: 2026-07-17 (Phase 1 마무리 시점)*
+*마지막 업데이트: 2026-07-17 (실제 API 연동 완료 시점)*
