@@ -18,9 +18,10 @@ from app.ingestion.hrfco_flood import HrfcoFloodClient
 from app.ingestion.kma_earthquake import KmaEarthquakeClient
 from app.ingestion.kma_warnings import KmaWarningClient
 from app.models import Event, Notification, Person, PersonTag, Subscription
-from app.models.enums import NotificationChannel, RiskSource
+from app.models.enums import NotificationChannel, RiskLevel, RiskSource
 from app.risk.matrix import evaluate_risk
 from app.services.message import generate_notification_message
+from app.services.risk_ai import evaluate_and_log
 
 
 # 마지막으로 수집 사이클이 "실제로 실행된" 시각 (프로세스 메모리 — 재시작 시 초기화).
@@ -168,6 +169,7 @@ def _notify_subscription_for_event(db: Session, event: Event, subscription: Subs
 
     tags = {t.tag for t in db.scalars(select(PersonTag).where(PersonTag.person_id == person.id))}
 
+    risk_source = RiskSource.MATRIX
     risk_level = evaluate_risk(
         event_type=event.event_type,
         age_group=person.age_group,
@@ -175,7 +177,13 @@ def _notify_subscription_for_event(db: Session, event: Event, subscription: Subs
         severity=event.severity,
     )
     if risk_level is None:
-        return False  # Layer1이 못 잡음 -> Phase 2에서 Layer2(LLM)로 넘길 케이스
+        # Layer 1 규칙에 없는 케이스 → Layer 2 LLM 보조 판단 (ai_risk_logs 에 기록됨)
+        risk_level = evaluate_and_log(db, event, subscription, person, tags)
+        risk_source = RiskSource.AI
+        if risk_level is None:
+            return False  # LLM 도 실패 — 판단 보류 (임의로 알림 만들지 않음)
+        if risk_level == RiskLevel.LOW:
+            return False  # 판단 기록은 남기되, LOW 는 알림 불필요 (알림 피로 방지)
 
     # LLM 맞춤 문구 (키 없거나 실패 시 내부에서 템플릿 fallback)
     message = generate_notification_message(event, person, risk_level, tags)
@@ -185,7 +193,7 @@ def _notify_subscription_for_event(db: Session, event: Event, subscription: Subs
             subscription_id=subscription.id,
             event_id=event.id,
             risk_level=risk_level,
-            risk_source=RiskSource.MATRIX,
+            risk_source=risk_source,
             message=message,
             channel=NotificationChannel.WEB_PUSH,  # TODO: Phase 2에서 device_tokens 기반으로 실제 발송
         )

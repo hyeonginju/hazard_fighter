@@ -14,10 +14,12 @@
 - **구독 소급 평가(backfill)**: 구독을 나중에 만들어도 이미 발효 중인 특보를 즉시 평가해 알림 생성. 지역명 정규화('광양시'→'광양') 포함
 - **LLM 알림 문구 생성 + 3단계 폴백 체인**: 유료(OpenAI) → 무료(Gemini, `.env`의 `LLM_FALLBACK_*`) → 템플릿. quota 소진(429) 감지 시 해당 프로바이더 15분 쿨다운. 두 프로바이더 모두 실연동 검증됨
 - **주기 자동 수집 스케줄러 (2026-07-20)**: 서버 기동 시 10분 주기 자동 ingest (asyncio, `app/scheduler.py`). 중복 실행 가드로 수동 `/events/ingest` 연타·겹침에도 공공 API 낭비 호출 없음. 주기는 API 호출량 예산 분석 기반(`docs/dev-learning-notes.md` 2026-07-20 항목), `.env`로 조정 가능
+- **Layer 2 LLM 위험도 보조 판단 (2026-07-20)**: 규칙 매트릭스 밖 케이스를 LLM이 판단(`app/services/risk_ai.py`) → `ai_risk_logs` 감사 기록 → MEDIUM/HIGH만 `risk_source=ai` 알림 생성. LLM 실패 시 판단 보류(임의 판정 금지), 프로필 캐시로 호출 절약
+- **로그 시크릿 마스킹 (2026-07-20)**: httpx 요청 로그에 노출되던 API 키를 루트 로거 필터로 자동 치환(`app/logging_utils.py`)
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 37개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 47개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): Layer 2 LLM 위험도 보조 판단(`ai_risk_logs`), 긴급재난문자 클라이언트, 홍수통제소 스로틀링, 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
+아직 없는 것 (다음): 긴급재난문자 클라이언트, 홍수통제소 스로틀링, 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -56,6 +58,9 @@ pytest
 - `test_warning_msg_parser.py` — 통보문 t6 파싱(실응답 케이스), 이벤트 dedupe
 - `test_subscription_backfill.py` — 구독 소급 평가, 지역명 정규화, 구독 멱등성
 - `test_message_generation.py` — LLM 폴백 체인(quota 소진 시 무료 전환·쿨다운·템플릿 폴백)
+- `test_risk_ai.py` — Layer 2 판단(알림 생성·LOW 필터·판단 보류·캐시·형식 위반 처리)
+- `test_scheduler_guard.py` — 수집 중복 실행 가드
+- `test_log_redaction.py` — 로그 시크릿 마스킹
 - `test_health.py` — 헬스체크
 
 운영 DDL은 Postgres를 타겟으로 하고(JSONB/네이티브 UUID 유지), 아래 Docker 절차로 실제 Postgres에 적용해 최종 확인한다.
@@ -94,7 +99,7 @@ pytest
 | 기상특보 | ✅ 지역 매칭까지 동작 | 통보문 상세(`getWthrWrnMsg`) `t6` 스냅샷 파싱으로 시군구 추출. 남은 것: 지역명 표기 정규화 고도화(행정구역 코드 기반) |
 | 지진 | ✅ 동작 | 필수 파라미터 fromTmFc/toTmFc + 최대 3일 제한 반영됨. 국내 지진 발생 시 필드 재확인, 국외 지진 필터 검토 |
 | 홍수통제소 | ✅ 동작 | `api.hrfco.go.kr` 수위 임계치 판정 방식. 모니터링 관측소가 청주 2곳 하드코딩 → 구독 지역 기반 동적 선정(river_gauges 테이블 활용)은 Phase 2 |
-| LLM (알림 문구) | ✅ 폴백 체인까지 동작 | OpenAI·Gemini 모두 실연동 검증. 남은 것: Layer 2 위험도 보조 판단에 재사용 |
+| LLM (문구 생성 + Layer 2 판단) | ✅ 폴백 체인까지 동작 | OpenAI·Gemini 실연동 검증. 범용 체인(app/services/llm.py)을 문구 생성·위험도 판단이 공유 |
 
 ## 왜 초기 마이그레이션이 `create_all`/`drop_all` 방식인가
 
@@ -104,5 +109,5 @@ pytest
 
 1. ~~실제 API 응답 확인·매핑~~ ✅ / ~~실제 Postgres 검증~~ ✅ (07-17) / ~~알림 문구 LLM + 폴백 체인~~ ✅ (07-19)
 2. ~~주기 실행(스케줄러)~~ ✅ (07-20, 내장 asyncio + 가드)
-3. **Layer 2 LLM 위험도 보조 판단** — 규칙 매트릭스가 못 잡는(None) 케이스를 LLM으로 판단, `ai_risk_logs`에 기록. 문구 생성과 같은 폴백 체인 재사용
+3. ~~Layer 2 LLM 위험도 보조 판단~~ ✅ (07-20 — 2계층 하이브리드 완성)
 4. 긴급재난문자 클라이언트, 홍수통제소 스로틀링, FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증

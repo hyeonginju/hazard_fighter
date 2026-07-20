@@ -1,6 +1,6 @@
 """
-알림 문구 생성 테스트 — LLM 프로바이더 폴백 체인 검증.
-실제 LLM 호출은 하지 않는다 (monkeypatch 로 httpx.post 를 대체).
+알림 문구 생성 테스트 — LLM 프로바이더 폴백 체인(app/services/llm.py) 검증.
+실제 LLM 호출은 하지 않는다 (monkeypatch 로 llm 모듈의 httpx.post 를 대체).
 
 검증하는 경로:
 - 키 없음 → 템플릿
@@ -14,16 +14,16 @@ import httpx
 import pytest
 
 from app.config import get_settings
-from app.services import message as message_mod
+from app.services import llm as llm_mod
 from app.services.message import generate_notification_message, template_message
 
 
 @pytest.fixture(autouse=True)
 def clear_cooldowns():
     """쿨다운 상태는 모듈 전역이라 테스트 간 격리 필요."""
-    message_mod._cooldowns.clear()
+    llm_mod._cooldowns.clear()
     yield
-    message_mod._cooldowns.clear()
+    llm_mod._cooldowns.clear()
 
 
 @pytest.fixture()
@@ -86,7 +86,7 @@ def test_llm_used_when_key_present(sample_event_person, with_fake_api_key, monke
         captured["json"] = kwargs.get("json")
         return _ok_response(url, "광양에 폭염주의보가 발효 중이에요. 어머니님, 낮 시간 외출을 피하고 물을 자주 드세요.")
 
-    monkeypatch.setattr(message_mod.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_mod.httpx, "post", fake_post)
 
     msg = generate_notification_message(event, person, "HIGH", {"보행보조필요"})
 
@@ -101,7 +101,7 @@ def test_fallback_on_api_error(sample_event_person, with_fake_api_key, monkeypat
     def fake_post(url, **kwargs):
         raise RuntimeError("llm down")
 
-    monkeypatch.setattr(message_mod.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_mod.httpx, "post", fake_post)
 
     msg = generate_notification_message(event, person, "HIGH")
     assert msg == template_message(event, person)  # 죽지 않고 템플릿으로
@@ -109,7 +109,7 @@ def test_fallback_on_api_error(sample_event_person, with_fake_api_key, monkeypat
 
 def test_fallback_on_empty_response(sample_event_person, with_fake_api_key, monkeypatch):
     event, person = sample_event_person
-    monkeypatch.setattr(message_mod.httpx, "post", lambda url, **kw: _ok_response(url, "  "))
+    monkeypatch.setattr(llm_mod.httpx, "post", lambda url, **kw: _ok_response(url, "  "))
 
     msg = generate_notification_message(event, person, "HIGH")
     assert msg == template_message(event, person)
@@ -128,7 +128,7 @@ def test_quota_exhausted_fails_over_to_free_provider(
             return _error_response(url, 429)  # 유료: quota 소진
         return _ok_response(url, "무료 모델이 생성한 맞춤 문구입니다.")
 
-    monkeypatch.setattr(message_mod.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_mod.httpx, "post", fake_post)
 
     msg = generate_notification_message(event, person, "HIGH")
 
@@ -150,7 +150,7 @@ def test_cooldown_skips_dead_provider_on_next_call(
             return _error_response(url, 429)
         return _ok_response(url, "무료 모델 문구.")
 
-    monkeypatch.setattr(message_mod.httpx, "post", fake_post)
+    monkeypatch.setattr(llm_mod.httpx, "post", fake_post)
 
     generate_notification_message(event, person, "HIGH")  # 1번째: 유료 실패 → 쿨다운 설정
     generate_notification_message(event, person, "HIGH")  # 2번째: 유료 스킵해야 함
@@ -164,7 +164,7 @@ def test_both_providers_down_falls_back_to_template(
     sample_event_person, with_fake_api_key, with_fallback_provider, monkeypatch
 ):
     event, person = sample_event_person
-    monkeypatch.setattr(message_mod.httpx, "post", lambda url, **kw: _error_response(url, 429))
+    monkeypatch.setattr(llm_mod.httpx, "post", lambda url, **kw: _error_response(url, 429))
 
     msg = generate_notification_message(event, person, "HIGH")
     assert msg == template_message(event, person)
