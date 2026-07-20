@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # 푸시 알림 (Phase 2 - 7절 알림 채널 전략)
     fcm_server_key: str | None = None
 
+    # 주기 수집 스케줄러 (호출량 예산: docs/dev-learning-notes.md 2026-07-20 항목)
+    scheduler_enabled: bool = True  # 테스트에선 conftest 가 0 으로 끔
+    ingest_interval_minutes: int = 10  # 10분 = 하루 144사이클, 가장 빡빡한 재난문자(1,000/일)도 14.4%
+    ingest_min_gap_minutes: int = 3  # 수동 /events/ingest 연타 가드 — 이 간격 내 재호출은 스킵
+
 
 @lru_cache
 def get_settings() -> Settings:

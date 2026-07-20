@@ -13,10 +13,11 @@
 - 위험도 판단 로직 Layer 1 (spec 4절 규칙 매트릭스) — 실데이터로 "전남 광양 폭염주의보 + 고령 구독자 → HIGH 알림" 생성 확인
 - **구독 소급 평가(backfill)**: 구독을 나중에 만들어도 이미 발효 중인 특보를 즉시 평가해 알림 생성. 지역명 정규화('광양시'→'광양') 포함
 - **LLM 알림 문구 생성 + 3단계 폴백 체인**: 유료(OpenAI) → 무료(Gemini, `.env`의 `LLM_FALLBACK_*`) → 템플릿. quota 소진(429) 감지 시 해당 프로바이더 15분 쿨다운. 두 프로바이더 모두 실연동 검증됨
+- **주기 자동 수집 스케줄러 (2026-07-20)**: 서버 기동 시 10분 주기 자동 ingest (asyncio, `app/scheduler.py`). 중복 실행 가드로 수동 `/events/ingest` 연타·겹침에도 공공 API 낭비 호출 없음. 주기는 API 호출량 예산 분석 기반(`docs/dev-learning-notes.md` 2026-07-20 항목), `.env`로 조정 가능
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 33개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 37개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): Layer 2 LLM 위험도 보조 판단(`ai_risk_logs`), 주기 실행(스케줄러), 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
+아직 없는 것 (다음): Layer 2 LLM 위험도 보조 판단(`ai_risk_logs`), 긴급재난문자 클라이언트, 홍수통제소 스로틀링, 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -102,6 +103,6 @@ pytest
 ## 다음 순서 (project-spec.md 10절 로드맵 기준)
 
 1. ~~실제 API 응답 확인·매핑~~ ✅ / ~~실제 Postgres 검증~~ ✅ (07-17) / ~~알림 문구 LLM + 폴백 체인~~ ✅ (07-19)
-2. **Layer 2 LLM 위험도 보조 판단** — 규칙 매트릭스가 못 잡는(None) 케이스를 LLM으로 판단, `ai_risk_logs`에 기록. 문구 생성과 같은 폴백 체인 재사용
-3. **주기 실행** — 지금은 수동 `POST /events/ingest` → 스케줄러로 10분 주기 자동 수집
-4. FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
+2. ~~주기 실행(스케줄러)~~ ✅ (07-20, 내장 asyncio + 가드)
+3. **Layer 2 LLM 위험도 보조 판단** — 규칙 매트릭스가 못 잡는(None) 케이스를 LLM으로 판단, `ai_risk_logs`에 기록. 문구 생성과 같은 폴백 체인 재사용
+4. 긴급재난문자 클라이언트, 홍수통제소 스로틀링, FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증

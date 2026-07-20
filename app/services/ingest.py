@@ -23,6 +23,39 @@ from app.risk.matrix import evaluate_risk
 from app.services.message import generate_notification_message
 
 
+# 마지막으로 수집 사이클이 "실제로 실행된" 시각 (프로세스 메모리 — 재시작 시 초기화).
+# 스케줄러와 수동 /events/ingest 가 공유하는 가드 상태.
+_last_cycle_at: datetime | None = None
+
+
+def run_ingestion_cycle_guarded(db: Session, min_gap_minutes: int | None = None) -> dict:
+    """중복 실행 가드가 붙은 수집 사이클.
+
+    최근 min_gap_minutes 내에 이미 수집했으면 공공 API 를 호출하지 않고 스킵한다.
+    이유(호출량 예산, 2026-07-20 분석): 수동 /events/ingest 연타나 스케줄러-수동 겹침이
+    그대로 공공 API 호출량으로 이어지는 것을 막는다. 특히 긴급재난문자는 일일 1,000건
+    한도라 낭비 호출이 뼈아프다.
+    """
+    global _last_cycle_at
+    if min_gap_minutes is None:
+        min_gap_minutes = get_settings().ingest_min_gap_minutes
+
+    now = datetime.now(timezone.utc)
+    if _last_cycle_at is not None:
+        elapsed = now - _last_cycle_at
+        if elapsed < timedelta(minutes=min_gap_minutes):
+            return {
+                "skipped": True,
+                "reason": f"최근 {int(elapsed.total_seconds())}초 전에 수집됨 (가드: {min_gap_minutes}분)",
+                "last_cycle_at": _last_cycle_at.isoformat(),
+            }
+
+    _last_cycle_at = now
+    result = run_ingestion_cycle(db)
+    result["skipped"] = False
+    return result
+
+
 def run_ingestion_cycle(db: Session) -> dict:
     """모든 소스에서 이벤트를 가져와 저장하고, 매칭되는 구독에 대해 위험도를 평가한다."""
     settings = get_settings()

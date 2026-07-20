@@ -29,5 +29,7 @@ _API_KEY_VARS = (
 def pytest_configure(config):
     for var in _API_KEY_VARS:
         os.environ[var] = ""
+    # 테스트 중엔 백그라운드 수집 스케줄러를 끈다 (외부 호출·타이밍 비결정성 방지)
+    os.environ["SCHEDULER_ENABLED"] = "0"
     # get_settings 는 lru_cache 라 이미 읽힌 설정이 있으면 비워준다
     get_settings.cache_clear()
