@@ -66,7 +66,7 @@ pytest
 | 기상특보 조회서비스 (data.go.kr 15000415) | ✅ 발급 완료 | `.env`의 `KMA_WARNING_API_KEY` |
 | 지진정보 조회서비스 (data.go.kr 15000420) | ✅ 발급 완료 | `.env`의 `KMA_EARTHQUAKE_API_KEY` |
 | 홍수통제소 표준수문DB (hrfco.go.kr) | ✅ 발급 완료 | `.env`의 `HRFCO_API_KEY`. data.go.kr 계정과 별개로 hrfco.go.kr에서 직접 발급. 인증키 신청 시 "사이트 URL(IP)"을 요구하는데, 개발 중인 컴퓨터 공인 IP나 보유 도메인(peterju.cloud)을 넣으면 됨. 배포 후 아웃바운드 IP가 바뀌면 재등록 필요 가능 (spec 12절 Open Question #8) |
-| 긴급재난문자 (safetydata.go.kr) | ⏳ 진행 중 | `.env`의 `SAFETYDATA_API_KEY`. Phase 5 확장 항목이라 급하진 않음 |
+| 긴급재난문자 (safetydata.go.kr) | ✅ 발급 완료 (2026-07-19) | `.env`의 `SAFETYDATA_API_KEY`. ingestion 클라이언트는 미구현(Phase 5 항목) — `debug_fetch.py`로 실응답 확인 후 구현 예정 |
 | LLM 유료 — 알림 문구 생성 | ✅ 발급·충전 완료 (OpenAI) | `.env`의 `OPENAI_API_KEY`. 선불 크레딧 필요(없으면 insufficient_quota → 자동으로 폴백 체인 작동) |
 | LLM 무료 폴백 (Gemini) | ✅ 발급 완료 | `.env`의 `LLM_FALLBACK_*` 3종. aistudio.google.com/apikey 에서 무료 발급. 모델명은 `gemini-flash-lite-latest` 같은 "latest" 별칭 권장 — 구버전 모델명은 무료 티어가 닫히면 `limit: 0` 429 가 남 |
 | Firebase Cloud Messaging — 웹푸시 (Phase 2) | ⏳ 미발급 | 레거시 `FCM_SERVER_KEY`는 2024.7 폐기됨. 서비스 계정 JSON 방식 사용: Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키 생성 → `secrets/firebase-service-account.json`. `.env`는 `GOOGLE_APPLICATION_CREDENTIALS`(파일 경로) + `FCM_PROJECT_ID` |
