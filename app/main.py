@@ -6,9 +6,11 @@ from fastapi import FastAPI
 
 from app.api.routes import events, health, notifications, persons, regions, subscriptions
 from app.config import get_settings
+from app.logging_utils import setup_secret_redaction
 from app.scheduler import ingest_loop
 
 logging.basicConfig(level=logging.INFO)
+setup_secret_redaction()  # httpx 등 로그에 API 키가 노출되지 않게 마스킹
 
 
 @asynccontextmanager
