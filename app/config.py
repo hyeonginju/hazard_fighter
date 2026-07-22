@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ingest_interval_minutes: int = 10  # 10분 = 하루 144사이클, 가장 빡빡한 재난문자(1,000/일)도 14.4%
     ingest_min_gap_minutes: int = 3  # 수동 /events/ingest 연타 가드 — 이 간격 내 재호출은 스킵
 
+    # 홍수통제소 분당 호출 상한. 실제 한도 1,000/분의 60% — 관측소를 여러 개 순회할 때
+    # 순간적으로 한도를 넘겨 키가 차단(초과 3회)되지 않도록 호출 속도에 상한을 건다.
+    hrfco_max_requests_per_minute: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:

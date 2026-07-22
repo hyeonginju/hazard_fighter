@@ -69,7 +69,7 @@ def run_ingestion_cycle(db: Session) -> dict:
     clients = [
         KmaWarningClient(settings.kma_warning_api_key),
         KmaEarthquakeClient(settings.kma_earthquake_api_key),
-        HrfcoFloodClient(settings.hrfco_api_key),
+        HrfcoFloodClient(settings.hrfco_api_key, settings.hrfco_max_requests_per_minute),
         SafetyDisasterMessageClient(settings.safetydata_api_key),
     ]
 

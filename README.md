@@ -18,9 +18,9 @@
 - **로그 시크릿 마스킹 (2026-07-20)**: httpx 요청 로그에 노출되던 API 키를 루트 로거 필터로 자동 치환(`app/logging_utils.py`)
 - **긴급재난문자 연동 (2026-07-22)**: safetydata `DSSP-IF-00247` 클라이언트(`app/ingestion/safety_disaster.py`). `crtDt` 날짜 필터 + 오름차순이라 마지막 페이지=최신을 잡는 2-call 방식, `DST_SE_NM` 비재해(기타·교통통제) denylist, 다지역 분리. **Option A(공식 방송 취급)**: 당국이 이미 방송한 경보라 위험엔진 재판정 없이 `risk_source=broadcast`/MEDIUM으로 알림, 문구는 `MSG_CN` 원문 기반 개인화. 오늘치 실데이터 90건(폭염/호우/산사태/화재/붕괴/홍수) 정규화 검증
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 57개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 62개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): 홍수통제소 스로틀링, 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
+아직 없는 것 (다음): 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -100,7 +100,7 @@ pytest
 |---|---|---|
 | 기상특보 | ✅ 지역 매칭까지 동작 | 통보문 상세(`getWthrWrnMsg`) `t6` 스냅샷 파싱으로 시군구 추출. 남은 것: 지역명 표기 정규화 고도화(행정구역 코드 기반) |
 | 지진 | ✅ 동작 | 필수 파라미터 fromTmFc/toTmFc + 최대 3일 제한 반영됨. 국내 지진 발생 시 필드 재확인, 국외 지진 필터 검토 |
-| 홍수통제소 | ✅ 동작 | `api.hrfco.go.kr` 수위 임계치 판정 방식. 모니터링 관측소가 청주 2곳 하드코딩 → 구독 지역 기반 동적 선정(river_gauges 테이블 활용)은 Phase 2 |
+| 홍수통제소 | ✅ 동작 | `api.hrfco.go.kr` 수위 임계치 판정 방식. 모니터링 관측소가 청주 2곳 하드코딩 → 구독 지역 기반 동적 선정(river_gauges 테이블 활용)은 Phase 2. 분당 호출 상한 스로틀링 적용(동적 선정 시 분당 1,000 한도 방어) |
 | LLM (문구 생성 + Layer 2 판단) | ✅ 폴백 체인까지 동작 | OpenAI·Gemini 실연동 검증. 범용 체인(app/services/llm.py)을 문구 생성·위험도 판단이 공유 |
 
 ## 왜 초기 마이그레이션이 `create_all`/`drop_all` 방식인가
@@ -113,4 +113,5 @@ pytest
 2. ~~주기 실행(스케줄러)~~ ✅ (07-20, 내장 asyncio + 가드)
 3. ~~Layer 2 LLM 위험도 보조 판단~~ ✅ (07-20 — 2계층 하이브리드 완성)
 4. ~~긴급재난문자 클라이언트~~ ✅ (07-22 — Option A 공식 방송 취급, DST_SE denylist, 실데이터 검증)
-5. 홍수통제소 스로틀링, FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
+5. ~~홍수통제소 스로틀링~~ ✅ (07-22 — 분당 호출 상한 레이트 리미터, 동적 선정 전 안전장치)
+6. FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
