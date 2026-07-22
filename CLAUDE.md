@@ -15,13 +15,14 @@
 
 ## 현재 상태 (2026-07-20 기준)
 
-Phase 1 완료 + Phase 2 대부분 완료. 실데이터로 "공공 API → 지역 매칭 → 위험도 판단(규칙+LLM) → 개인 맞춤 알림 생성"까지 end-to-end 검증됨. 테스트 62개 통과.
+Phase 1 완료 + Phase 2 대부분 완료. 실데이터로 "공공 API → 지역 매칭 → 위험도 판단(규칙+LLM) → 개인 맞춤 알림 생성 → 발송(dispatch)"까지 end-to-end 검증됨. 테스트 73개 통과.
 
-**동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(공식 방송 취급, risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, 구독 소급 평가, LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
+**동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(공식 방송 취급, risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, FCM 웹푸시 발송(생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock), 기기 토큰 등록(POST /device-tokens), 구독 소급 평가, LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
 
 **다음 할 일 (우선순위):**
-1. FCM 웹푸시 발송(서비스 계정 JSON), 웹 PWA 구독 화면, JWT 인증.
-2. (선택) 홍수 관측소 동적 선정 — river_gauges/gauge_region_maps 테이블 활용해 구독 지역 기반 선정. 스로틀링은 이미 깔림.
+1. 웹 PWA 구독 화면 — 여기서 FCM 웹 토큰을 발급받아 `POST /device-tokens`로 등록하는 클라이언트 연동 포함. JWT 인증(현재 `user_email` 임시 방식 대체).
+2. FCM 실기기 발송 검증 — 서비스계정 JSON(`secrets/firebase-service-account.json`) 발급 후. 발송 코드는 완료, JSON만 넣으면 mock→실발송 자동 전환.
+3. (선택) 홍수 관측소 동적 선정 — river_gauges/gauge_region_maps 테이블 활용해 구독 지역 기반 선정. 스로틀링은 이미 깔림.
 
 **긴급재난문자 관련 후속(선택):** 재난문자 전용 폴링 주기 분리(현재는 전 소스 공통 10분 — 재난문자는 2-call/사이클이라 288회/일), `전남광주통합특별시` 같은 비표준 시도명·시도-only(`전체`) 매칭 개선, DST_SE_NM 별 위험도 세분화.
 
@@ -30,17 +31,19 @@ Phase 1 완료 + Phase 2 대부분 완료. 실데이터로 "공공 API → 지�
 ```
 app/ingestion/*     공공 API 클라이언트 (BaseIngestionClient 상속, 키 없으면 mock)
 app/services/
-  ingest.py         파이프라인 오케스트레이션 (run_ingestion_cycle_guarded 진입점)
+  ingest.py         파이프라인 오케스트레이션 (run_ingestion_cycle_guarded 진입점, 끝에서 dispatch 호출)
   llm.py            LLM 폴백 체인 (chat()) — 문구 생성·위험도 판단이 공유
   message.py        알림 문구 생성 (실패 시 템플릿 fallback)
   risk_ai.py        Layer 2 LLM 위험도 판단 (실패 시 판단 보류)
+  dispatch.py       생성/발송 분리 — 미발송(sent_at=NULL) 알림을 모아 FCM 발송·sent_at 기록
+  push.py           FCM HTTP v1 발송 클라이언트 (서비스계정 OAuth2, 미설정 시 no-op/mock)
 app/risk/matrix.py  Layer 1 결정론적 규칙 매트릭스
 app/scheduler.py    10분 주기 백그라운드 수집 루프 (lifespan에서 기동)
 app/models/*        SQLAlchemy 모델 12개 (types.py = 다이얼렉트 호환 타입)
 app/logging_utils.py 로그 시크릿 마스킹 필터
 ```
 
-데이터 흐름: 수집 → events 저장(dedupe) → 구독 매칭 → Layer1 규칙(없으면 Layer2 LLM) → notifications 생성.
+데이터 흐름: 수집 → events 저장(dedupe) → 구독 매칭 → Layer1 규칙(없으면 Layer2 LLM) → notifications 생성 → dispatch(미발송분 FCM 발송, sent_at 기록).
 
 ## 이 프로젝트의 반복 패턴 (새 코드도 이 원칙 따를 것)
 

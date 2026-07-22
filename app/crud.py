@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Person, PersonTag, Region, Subscription, User
+from app.models import DeviceToken, Person, PersonTag, Region, Subscription, User
 
 
 def get_or_create_user(db: Session, email: str) -> User:
@@ -90,3 +90,29 @@ def create_subscription(db: Session, user: User, person_id: uuid.UUID, region_id
 
 def list_subscriptions(db: Session, user: User) -> list[Subscription]:
     return list(db.scalars(select(Subscription).where(Subscription.user_id == user.id)))
+
+
+def register_device_token(db: Session, user: User, fcm_token: str, platform: str) -> DeviceToken:
+    """푸시 발송 대상 기기 토큰을 등록한다. fcm_token 은 유니크 (멱등).
+
+    같은 토큰을 다시 등록하면(브라우저 재방문·토큰 로테이션) 500 으로 터뜨리지 않고
+    소유 사용자·플랫폼만 갱신한다. FCM 토큰은 기기/브라우저마다 유일하므로
+    이 토큰이 다른 계정에 붙어 있었다면 현재 사용자로 옮긴다.
+    """
+    existing = db.scalar(select(DeviceToken).where(DeviceToken.fcm_token == fcm_token))
+    if existing is not None:
+        existing.user_id = user.id
+        existing.platform = platform
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    token = DeviceToken(user_id=user.id, fcm_token=fcm_token, platform=platform)
+    db.add(token)
+    db.commit()
+    db.refresh(token)
+    return token
+
+
+def list_device_tokens(db: Session, user: User) -> list[DeviceToken]:
+    return list(db.scalars(select(DeviceToken).where(DeviceToken.user_id == user.id)))

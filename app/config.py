@@ -4,6 +4,7 @@ project-spec.md 11절(기술 스택) 참고.
 """
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +31,12 @@ class Settings(BaseSettings):
     llm_fallback_api_key: str | None = None
     llm_fallback_model: str | None = None
 
-    # 푸시 알림 (Phase 2 - 7절 알림 채널 전략)
-    fcm_server_key: str | None = None
+    # 푸시 알림 (Phase 2 - 7절 알림 채널 전략). FCM HTTP v1 방식.
+    # 레거시 서버키(fcm_server_key)는 2024.6 구글이 폐기 → 서비스계정 JSON + OAuth2 Bearer 로 전환.
+    # 둘 다 설정돼 있어야 실제 발송, 아니면 no-op(mock) 로 동작한다(app/services/push.py).
+    fcm_project_id: str | None = None  # Firebase 프로젝트 ID (v1 엔드포인트 경로에 들어감). env: FCM_PROJECT_ID
+    # 서비스계정 JSON 경로 (secrets/ 아래 권장, gitignore됨). google-auth 관례 이름을 그대로 씀.
+    fcm_credentials_file: str | None = Field(default=None, validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
 
     # 주기 수집 스케줄러 (호출량 예산: docs/dev-learning-notes.md 2026-07-20 항목)
     scheduler_enabled: bool = True  # 테스트에선 conftest 가 0 으로 끔

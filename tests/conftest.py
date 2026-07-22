@@ -23,6 +23,9 @@ _API_KEY_VARS = (
     "LLM_FALLBACK_BASE_URL",
     "LLM_FALLBACK_API_KEY",
     "LLM_FALLBACK_MODEL",
+    # FCM 도 비워 발송을 mock(no-op)으로 — 테스트는 실제 서비스계정·네트워크 없이 돌아야 한다
+    "FCM_PROJECT_ID",
+    "GOOGLE_APPLICATION_CREDENTIALS",
 )
 
 

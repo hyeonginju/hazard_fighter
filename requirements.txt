@@ -8,3 +8,5 @@ pydantic-settings==2.7.0
 email-validator==2.2.0
 python-dotenv==1.0.1
 httpx==0.28.1
+google-auth==2.38.0
+requests==2.32.3

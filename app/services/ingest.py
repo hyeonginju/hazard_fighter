@@ -1,10 +1,11 @@
 """
 Phase 1 파이프라인 전체를 한 번 돌리는 오케스트레이션.
 project-spec.md 8절(시스템 아키텍처) 흐름을 그대로 코드로 옮긴 것:
-  ingestion -> events 저장 -> (지역 매칭된) 구독 조회 -> Layer1 위험도 평가 -> notifications 생성
+  ingestion -> events 저장 -> (지역 매칭된) 구독 조회 -> Layer1/2 위험도 평가
+    -> notifications 생성 -> dispatch(미발송 알림 FCM 발송)
 
-Layer2(LLM 보조 판단·알림 문구 생성)와 실제 FCM 발송은 Phase 2 항목이라
-지금은 risk_level이 안 잡히면 스킵하고, 메시지는 템플릿 문자열로 대신한다 (TODO 표시).
+사이클 끝에서 dispatch_unsent_notifications 로 생성과 발송을 분리한다(app/services/dispatch.py).
+FCM 자격증명이 없으면 발송은 no-op(mock) 으로 동작한다.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,7 @@ from app.models.enums import EventSource, NotificationChannel, RiskLevel, RiskSo
 # 위험엔진 재판정 없이 이 기본값을 매긴다. 필요하면 DST_SE_NM 별 매핑으로 세분화 가능.
 _BROADCAST_RISK_LEVEL = RiskLevel.MEDIUM
 from app.risk.matrix import evaluate_risk
+from app.services.dispatch import dispatch_unsent_notifications
 from app.services.message import generate_notification_message
 from app.services.risk_ai import evaluate_and_log
 
@@ -93,10 +95,15 @@ def run_ingestion_cycle(db: Session) -> dict:
     for event in stored_events:  # 신규 이벤트만 평가 — 중복 알림 방지
         notifications_created += _evaluate_and_notify(db, event)
 
+    # 생성/발송 분리: 새로 만든 알림뿐 아니라 이전 사이클에 못 보낸 것까지 여기서 flush.
+    # sent_at 이 가드라 이미 보낸 건 재발송하지 않는다(멱등).
+    dispatch = dispatch_unsent_notifications(db)
+
     return {
         "events_ingested": len(stored_events),
         "duplicates_skipped": duplicates_skipped,
         "notifications_created": notifications_created,
+        "notifications_sent": dispatch["sent"],
         "errors": errors,
     }
 

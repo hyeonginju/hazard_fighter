@@ -47,7 +47,6 @@ def _collect_secrets() -> list[str]:
         s.openai_api_key or "",
         s.anthropic_api_key or "",
         s.llm_fallback_api_key or "",
-        s.fcm_server_key or "",
     ]
 
 

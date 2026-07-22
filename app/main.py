@@ -4,7 +4,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import events, health, notifications, persons, regions, subscriptions
+from app.api.routes import (
+    device_tokens,
+    events,
+    health,
+    notifications,
+    persons,
+    regions,
+    subscriptions,
+)
 from app.config import get_settings
 from app.logging_utils import setup_secret_redaction
 from app.scheduler import ingest_loop
@@ -37,3 +45,4 @@ app.include_router(regions.router)
 app.include_router(subscriptions.router)
 app.include_router(events.router)
 app.include_router(notifications.router)
+app.include_router(device_tokens.router)

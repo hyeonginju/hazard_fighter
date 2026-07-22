@@ -17,10 +17,11 @@
 - **Layer 2 LLM 위험도 보조 판단 (2026-07-20)**: 규칙 매트릭스 밖 케이스를 LLM이 판단(`app/services/risk_ai.py`) → `ai_risk_logs` 감사 기록 → MEDIUM/HIGH만 `risk_source=ai` 알림 생성. LLM 실패 시 판단 보류(임의 판정 금지), 프로필 캐시로 호출 절약
 - **로그 시크릿 마스킹 (2026-07-20)**: httpx 요청 로그에 노출되던 API 키를 루트 로거 필터로 자동 치환(`app/logging_utils.py`)
 - **긴급재난문자 연동 (2026-07-22)**: safetydata `DSSP-IF-00247` 클라이언트(`app/ingestion/safety_disaster.py`). `crtDt` 날짜 필터 + 오름차순이라 마지막 페이지=최신을 잡는 2-call 방식, `DST_SE_NM` 비재해(기타·교통통제) denylist, 다지역 분리. **Option A(공식 방송 취급)**: 당국이 이미 방송한 경보라 위험엔진 재판정 없이 `risk_source=broadcast`/MEDIUM으로 알림, 문구는 `MSG_CN` 원문 기반 개인화. 오늘치 실데이터 90건(폭염/호우/산사태/화재/붕괴/홍수) 정규화 검증
-- 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 62개(전부 DB 서버·외부 API 없이 돎)
+- **FCM 웹푸시 발송 (2026-07-22)**: 생성/발송을 분리한 dispatch 단계(`app/services/dispatch.py`) — 알림을 `sent_at=NULL`로 쌓고, ingest 사이클 끝에서 미발송분만 모아 FCM HTTP v1(서비스계정 OAuth2, `app/services/push.py`)로 발송 후 `sent_at` 기록. `sent_at`이 멱등 가드라 중복발송 방지·실패 자동 재시도, 죽은 토큰(404) 자동 정리. 서비스계정 JSON이 없으면 no-op(mock)으로 degrade. `POST /device-tokens`로 기기 토큰 등록(멱등)
+- 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회, 기기 토큰 등록
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 73개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): 실제 FCM 푸시 발송, 웹 프론트(PWA), JWT 인증.
+아직 없는 것 (다음): 웹 프론트(PWA, FCM 토큰 발급·등록 클라이언트 포함), JWT 인증, 실제 서비스계정 JSON 발급 후 실기기 발송 검증.
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -77,7 +78,7 @@ pytest
 | 긴급재난문자 (safetydata.go.kr) | ✅ 발급·연동 완료 (2026-07-22) | `.env`의 `SAFETYDATA_API_KEY`. `DSSP-IF-00247`, 클라이언트 `app/ingestion/safety_disaster.py` 구현·실데이터 검증 완료. **일일 한도 1,000건**이라 2-call/사이클(288회/일)로 설계 — 폴링 주기 10분 이상 유지 필수 |
 | LLM 유료 — 알림 문구 생성 | ✅ 발급·충전 완료 (OpenAI) | `.env`의 `OPENAI_API_KEY`. 선불 크레딧 필요(없으면 insufficient_quota → 자동으로 폴백 체인 작동) |
 | LLM 무료 폴백 (Gemini) | ✅ 발급 완료 | `.env`의 `LLM_FALLBACK_*` 3종. aistudio.google.com/apikey 에서 무료 발급. 모델명은 `gemini-flash-lite-latest` 같은 "latest" 별칭 권장 — 구버전 모델명은 무료 티어가 닫히면 `limit: 0` 429 가 남 |
-| Firebase Cloud Messaging — 웹푸시 (Phase 2) | ⏳ 미발급 | 레거시 `FCM_SERVER_KEY`는 2024.7 폐기됨. 서비스 계정 JSON 방식 사용: Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키 생성 → `secrets/firebase-service-account.json`. `.env`는 `GOOGLE_APPLICATION_CREDENTIALS`(파일 경로) + `FCM_PROJECT_ID` |
+| Firebase Cloud Messaging — 웹푸시 | ⏳ 자격증명 미발급 (발송 코드는 완료) | 레거시 `FCM_SERVER_KEY`는 2024.7 폐기됨. 서비스 계정 JSON 방식: Firebase 콘솔 → 프로젝트 설정 → 서비스 계정 → 비공개 키 생성 → `secrets/firebase-service-account.json`. `.env`는 `GOOGLE_APPLICATION_CREDENTIALS`(파일 경로) + `FCM_PROJECT_ID`. **발송 파이프라인(`push.py`/`dispatch.py`)은 구현·테스트 완료** — 자격증명이 없으면 mock으로 degrade하므로, JSON만 넣으면 실발송 전환 |
 
 키가 없는 소스는 `app/ingestion/*.py`의 `fetch()`가 자동으로 mock 데이터를 반환하므로, 키 발급을 기다리지 않고도 API/DB/위험도 로직을 계속 개발·테스트할 수 있다.
 
@@ -114,4 +115,5 @@ pytest
 3. ~~Layer 2 LLM 위험도 보조 판단~~ ✅ (07-20 — 2계층 하이브리드 완성)
 4. ~~긴급재난문자 클라이언트~~ ✅ (07-22 — Option A 공식 방송 취급, DST_SE denylist, 실데이터 검증)
 5. ~~홍수통제소 스로틀링~~ ✅ (07-22 — 분당 호출 상한 레이트 리미터, 동적 선정 전 안전장치)
-6. FCM 웹푸시 실제 발송(서비스 계정 JSON 방식), 웹(PWA) 구독 관리 화면, JWT 인증
+6. ~~FCM 웹푸시 발송~~ ✅ (07-22 — 생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock)
+7. 웹(PWA) 구독 관리 화면(FCM 토큰 발급·등록 클라이언트 포함), JWT 인증, 실기기 발송 검증
