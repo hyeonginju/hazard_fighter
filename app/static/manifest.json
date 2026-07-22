@@ -1,0 +1,17 @@
+{
+  "name": "시켜줘, 명예소방관",
+  "short_name": "명예소방관",
+  "description": "공공데이터 기반 개인 맞춤형 이상상황 알림",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#faf7f5",
+  "theme_color": "#c62828",
+  "icons": [
+    {
+      "src": "/static/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

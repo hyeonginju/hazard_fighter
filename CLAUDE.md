@@ -15,14 +15,16 @@
 
 ## 현재 상태 (2026-07-20 기준)
 
-Phase 1 완료 + Phase 2 대부분 완료. 실데이터로 "공공 API → 지역 매칭 → 위험도 판단(규칙+LLM) → 개인 맞춤 알림 생성 → 발송(dispatch)"까지 end-to-end 검증됨. 테스트 73개 통과.
+Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 94개 통과.
 
-**동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(공식 방송 취급, risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, FCM 웹푸시 발송(생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock), 기기 토큰 등록(POST /device-tokens), 구독 소급 평가, LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
+**동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, **이름 기반 지역 매칭**(crud.regions_match — 행정구역명↔예보구역명: 시도 표준화+'전체'+접두어), Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, FCM 웹푸시 발송(생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock — **실기기 검증 완료**), 웹 PWA 구독 화면(GET /app — 단일 폼+알림 게이트, 표준 행정구역 드롭다운 districts.js, 동적 서비스워커, 포그라운드 수신 핸들러), 구독 소급 평가, LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
 
 **다음 할 일 (우선순위):**
-1. 웹 PWA 구독 화면 — 여기서 FCM 웹 토큰을 발급받아 `POST /device-tokens`로 등록하는 클라이언트 연동 포함. JWT 인증(현재 `user_email` 임시 방식 대체).
-2. FCM 실기기 발송 검증 — 서비스계정 JSON(`secrets/firebase-service-account.json`) 발급 후. 발송 코드는 완료, JSON만 넣으면 mock→실발송 자동 전환.
+1. 알림 dedupe — 예보구역 분할(경주남부/서부/…) 때문에 특보 하나에 알림이 구역 수만큼 발송됨. 같은 사이클의 (보호대상, 특보 종류·등급)은 1건으로 합치기.
+2. JWT 인증 — 현재 `user_email` 임시 방식(`/persons`·`/subscriptions`·`/notifications`·`/device-tokens`) 대체.
 3. (선택) 홍수 관측소 동적 선정 — river_gauges/gauge_region_maps 테이블 활용해 구독 지역 기반 선정. 스로틀링은 이미 깔림.
+
+**모바일 테스트 방법:** 웹푸시는 HTTPS 필수(localhost 예외) → `cloudflared tunnel --url http://localhost:8000` 으로 임시 HTTPS 주소 발급 후 폰에서 접속. iPhone 은 Safari "홈 화면에 추가" 필요.
 
 **긴급재난문자 관련 후속(선택):** 재난문자 전용 폴링 주기 분리(현재는 전 소스 공통 10분 — 재난문자는 2-call/사이클이라 288회/일), `전남광주통합특별시` 같은 비표준 시도명·시도-only(`전체`) 매칭 개선, DST_SE_NM 별 위험도 세분화.
 
@@ -38,6 +40,8 @@ app/services/
   dispatch.py       생성/발송 분리 — 미발송(sent_at=NULL) 알림을 모아 FCM 발송·sent_at 기록
   push.py           FCM HTTP v1 발송 클라이언트 (서비스계정 OAuth2, 미설정 시 no-op/mock)
 app/risk/matrix.py  Layer 1 결정론적 규칙 매트릭스
+app/static/*        웹 PWA 구독 화면 (순수 HTML+JS, GET /app 으로 서빙 — 빌드 도구 없음)
+app/api/routes/web.py  /app·/firebase-config·동적 서비스워커(/firebase-messaging-sw.js) 서빙
 app/scheduler.py    10분 주기 백그라운드 수집 루프 (lifespan에서 기동)
 app/models/*        SQLAlchemy 모델 12개 (types.py = 다이얼렉트 호환 타입)
 app/logging_utils.py 로그 시크릿 마스킹 필터
@@ -99,3 +103,6 @@ uvicorn app.main:app --reload      # http://localhost:8000/docs
 - 지진 API는 `fromTmFc/toTmFc` 필수 + 최대 조회 3일.
 - Gemini 무료 모델명은 `gemini-flash-lite-latest` 같은 "latest" 별칭 사용 (구버전명은 `limit: 0` 429).
 - 시간 언급 시 `TZ=Asia/Seoul date`로 한국 시간 확인할 것.
+- 웹푸시 권한 요청(`Notification.requestPermission`)은 버튼 클릭 직후 **첫 번째 await**여야 함 — fetch 등을 먼저 하면 user activation 소진으로 모바일 크롬이 팝업 없이 조용히 거부.
+- FCM 발송 성공(200) ≠ 사용자 눈에 표시됨 — 탭이 포그라운드면 메시지가 페이지로 와서 onMessage 핸들러 없이는 조용히 버려짐. 실기기에서 실제로 겪은 함정.
+- 실데이터 지역명은 행정구역명이 아니라 기상청 예보구역명(부산·경주남부·달성남부 등) — 지역 관련 코드는 `crud.regions_match` 매칭 규칙을 거칠 것.

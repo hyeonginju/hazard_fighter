@@ -26,6 +26,11 @@ _API_KEY_VARS = (
     # FCM 도 비워 발송을 mock(no-op)으로 — 테스트는 실제 서비스계정·네트워크 없이 돌아야 한다
     "FCM_PROJECT_ID",
     "GOOGLE_APPLICATION_CREDENTIALS",
+    # Firebase 웹 클라이언트 설정도 비움 — /firebase-config 가 enabled=false 인 상태가 기본
+    "FCM_WEB_API_KEY",
+    "FCM_WEB_APP_ID",
+    "FCM_WEB_MESSAGING_SENDER_ID",
+    "FCM_VAPID_KEY",
 )
 
 

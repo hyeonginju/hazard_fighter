@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     device_tokens,
@@ -12,6 +13,7 @@ from app.api.routes import (
     persons,
     regions,
     subscriptions,
+    web,
 )
 from app.config import get_settings
 from app.logging_utils import setup_secret_redaction
@@ -46,3 +48,7 @@ app.include_router(subscriptions.router)
 app.include_router(events.router)
 app.include_router(notifications.router)
 app.include_router(device_tokens.router)
+app.include_router(web.router)
+
+# 웹 PWA 정적 파일 (css/js/manifest/아이콘). 화면 자체는 GET /app 이 서빙한다.
+app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")

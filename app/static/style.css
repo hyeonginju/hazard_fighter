@@ -1,0 +1,92 @@
+/* 시켜줘, 명예소방관 — 모바일 우선 최소 스타일 */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  background: #faf7f5;
+  color: #222;
+  line-height: 1.5;
+}
+header {
+  background: #c62828;
+  color: #fff;
+  padding: 1.2rem 1rem;
+  text-align: center;
+}
+header h1 { margin: 0; font-size: 1.4rem; }
+.subtitle { margin: 0.3rem 0 0; opacity: 0.9; font-size: 0.9rem; }
+
+main { max-width: 480px; margin: 0 auto; padding: 1rem; }
+section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.hint { font-size: 0.85rem; color: #666; margin: 0 0 0.8rem; }
+
+form { display: flex; flex-direction: column; gap: 0.6rem; }
+.field-label { font-size: 0.85rem; font-weight: 700; color: #444; margin-top: 0.4rem; }
+[hidden] { display: none !important; } /* 커스텀 display 가 hidden 속성을 덮지 않게 */
+input[type="text"], input[type="email"], select {
+  padding: 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+fieldset {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+legend { font-size: 0.85rem; color: #666; }
+fieldset label { display: flex; align-items: center; gap: 0.3rem; }
+
+button {
+  padding: 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: #c62828;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+button:disabled { background: #bbb; cursor: not-allowed; }
+button.small { font-size: 0.75rem; padding: 0.2rem 0.6rem; vertical-align: middle; }
+
+.status { font-size: 0.85rem; color: #444; margin: 0.6rem 0 0; }
+
+.card-list { list-style: none; padding: 0; margin: 0.8rem 0 0; }
+.card-list li {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+.card-list li small { display: block; color: #888; margin-top: 0.2rem; }
+.card-list li.empty { color: #999; border: none; text-align: center; }
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+  background: #999;
+  margin-right: 0.3rem;
+}
+.risk-HIGH .badge { background: #c62828; }
+.risk-MEDIUM .badge { background: #ef6c00; }
+.risk-LOW .badge { background: #2e7d32; }
+.risk-HIGH { border-left: 4px solid #c62828; }
+.risk-MEDIUM { border-left: 4px solid #ef6c00; }
+
+footer { text-align: center; font-size: 0.8rem; color: #999; padding: 1rem; }
+footer a { color: inherit; }

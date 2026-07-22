@@ -38,6 +38,29 @@ class Settings(BaseSettings):
     # 서비스계정 JSON 경로 (secrets/ 아래 권장, gitignore됨). google-auth 관례 이름을 그대로 씀.
     fcm_credentials_file: str | None = Field(default=None, validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
 
+    # Firebase 웹 클라이언트 설정 (PWA 가 FCM 웹 토큰을 발급받을 때 필요).
+    # 서비스계정(위)과 달리 이 값들은 "브라우저에 배포되는 공개 설정"이라 시크릿이 아니다.
+    # 다만 설정을 .env 한 곳에 모으기 위해 여기서 읽어 /firebase-config 로 프론트에 내려준다.
+    # Firebase 콘솔 > 프로젝트 설정 > 일반 > 웹 앱에서 확인.
+    fcm_web_api_key: str | None = None  # env: FCM_WEB_API_KEY
+    fcm_web_app_id: str | None = None  # env: FCM_WEB_APP_ID
+    fcm_web_messaging_sender_id: str | None = None  # env: FCM_WEB_MESSAGING_SENDER_ID
+    # 웹푸시 인증서(VAPID) 공개키 — 콘솔 > 클라우드 메시징 > 웹 푸시 인증서
+    fcm_vapid_key: str | None = None  # env: FCM_VAPID_KEY
+
+    @property
+    def fcm_web_enabled(self) -> bool:
+        """웹 토큰 발급에 필요한 클라이언트 설정이 전부 채워졌는가."""
+        return all(
+            (
+                self.fcm_project_id,
+                self.fcm_web_api_key,
+                self.fcm_web_app_id,
+                self.fcm_web_messaging_sender_id,
+                self.fcm_vapid_key,
+            )
+        )
+
     # 주기 수집 스케줄러 (호출량 예산: docs/dev-learning-notes.md 2026-07-20 항목)
     scheduler_enabled: bool = True  # 테스트에선 conftest 가 0 으로 끔
     ingest_interval_minutes: int = 10  # 10분 = 하루 144사이클, 가장 빡빡한 재난문자(1,000/일)도 14.4%

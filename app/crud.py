@@ -51,6 +51,47 @@ def normalize_sigungu(sigungu: str) -> str:
     return cleaned
 
 
+# 시도명 표준화: 행정구역 공식명(부산광역시)과 기상청 통보문 표기(부산)를 같은 키로.
+# 접두어 매칭이라 '전북특별자치도'/'전북자치도'/'전라북도' 가 모두 '전북'으로 모인다.
+_SIDO_PREFIX_TO_KEY = (
+    ("서울", "서울"), ("부산", "부산"), ("대구", "대구"), ("인천", "인천"),
+    ("광주", "광주"), ("대전", "대전"), ("울산", "울산"), ("세종", "세종"),
+    ("경기", "경기"), ("강원", "강원"),
+    ("충청북", "충북"), ("충북", "충북"), ("충청남", "충남"), ("충남", "충남"),
+    ("전라북", "전북"), ("전북", "전북"), ("전라남", "전남"), ("전남", "전남"),
+    ("경상북", "경북"), ("경북", "경북"), ("경상남", "경남"), ("경남", "경남"),
+    ("제주", "제주"),
+)
+
+
+def canonical_sido(sido: str) -> str:
+    cleaned = sido.strip()
+    for prefix, key in _SIDO_PREFIX_TO_KEY:
+        if cleaned.startswith(prefix):
+            return key
+    return cleaned
+
+
+def regions_match(sub_region: Region, event_region: Region) -> bool:
+    """구독 지역(사용자가 고른 행정구역명)과 이벤트 지역(공공 API의 예보구역명)이
+    같은 곳을 가리키는지 판정한다.
+
+    이름이 글자까지 같아야 하는 region_id 동일성 대신 3단계 규칙:
+    ① 시도를 표준화해 비교 (부산광역시 ↔ 부산, 전북특별자치도 ↔ 전북자치도)
+    ② 어느 한쪽이 '전체'(시도 단위 특보)면 시도만 맞으면 매칭
+    ③ 시군구는 접두어 비교 — '경주(시)' 구독이 기상청 분할 구역 '경주남부'·'경주서부'에 매칭.
+       같은 시도 안에서만 비교하므로 다른 도의 동명(경남 고성 vs 강원 고성)은 ①에서 걸러진다.
+    한계: '제주도산지'처럼 행정구역과 무관한 예보구역은 접두어로도 못 잡는다 (region_code TODO).
+    """
+    if canonical_sido(sub_region.sido) != canonical_sido(event_region.sido):
+        return False
+    if sub_region.sigungu == "전체" or event_region.sigungu == "전체":
+        return True
+    a = normalize_sigungu(sub_region.sigungu)
+    b = normalize_sigungu(event_region.sigungu)
+    return a.startswith(b) or b.startswith(a)
+
+
 def get_or_create_region(db: Session, sido: str, sigungu: str, region_code: str | None) -> Region:
     sigungu = normalize_sigungu(sigungu)
     region = db.scalar(select(Region).where(Region.sido == sido, Region.sigungu == sigungu))

@@ -13,13 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.crud import get_or_create_region
+from app.crud import get_or_create_region, regions_match
 from app.ingestion.base import NormalizedEvent
 from app.ingestion.hrfco_flood import HrfcoFloodClient
 from app.ingestion.kma_earthquake import KmaEarthquakeClient
 from app.ingestion.kma_warnings import KmaWarningClient
 from app.ingestion.safety_disaster import SafetyDisasterMessageClient
-from app.models import Event, Notification, Person, PersonTag, Subscription
+from app.models import Event, Notification, Person, PersonTag, Region, Subscription
 from app.models.enums import EventSource, NotificationChannel, RiskLevel, RiskSource
 
 # 긴급재난문자(Option A) 기본 위험도 — 당국이 이미 방송한 경보라 관련 있음으로 보되,
@@ -150,7 +150,14 @@ def _evaluate_and_notify(db: Session, event: Event) -> int:
     if event.region_id is None:
         return 0  # TODO: 지진처럼 region 매칭이 약한 소스는 Phase 2에서 별도 처리
 
-    subscriptions = list(db.scalars(select(Subscription).where(Subscription.region_id == event.region_id)))
+    # region_id 동일성이 아니라 이름 기반 매칭(crud.regions_match):
+    # 사용자는 행정구역명(경주시)을 구독하고 공공 API는 예보구역명(경주남부)을 만들기 때문.
+    event_region = db.get(Region, event.region_id)
+    subscriptions = [
+        s
+        for s in db.scalars(select(Subscription))
+        if (r := db.get(Region, s.region_id)) is not None and regions_match(r, event_region)
+    ]
 
     created = 0
     for subscription in subscriptions:
@@ -229,14 +236,14 @@ def backfill_subscription(db: Session, subscription: Subscription, hours: int = 
     최근 hours 시간 내 해당 지역 이벤트를 대상으로 같은 평가 로직을 소급 적용한다.
     """
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    events = list(
-        db.scalars(
-            select(Event).where(
-                Event.region_id == subscription.region_id,
-                Event.occurred_at >= cutoff,
-            )
+    sub_region = db.get(Region, subscription.region_id)
+    events = [
+        e
+        for e in db.scalars(
+            select(Event).where(Event.region_id.is_not(None), Event.occurred_at >= cutoff)
         )
-    )
+        if (r := db.get(Region, e.region_id)) is not None and regions_match(sub_region, r)
+    ]
 
     created = 0
     for event in events:
