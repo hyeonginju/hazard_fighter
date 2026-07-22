@@ -56,6 +56,7 @@ class RiskLevel(StrEnum):
 class RiskSource(StrEnum):
     MATRIX = "matrix"  # Layer 1 결정론적 규칙
     AI = "ai"  # Layer 2 LLM 보조 판단
+    BROADCAST = "broadcast"  # 긴급재난문자 — 당국이 이미 방송한 공식 경보 (위험엔진 재판정 없음)
 
 
 class DevicePlatform(StrEnum):

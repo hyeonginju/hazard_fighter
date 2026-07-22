@@ -17,8 +17,13 @@ from app.ingestion.base import NormalizedEvent
 from app.ingestion.hrfco_flood import HrfcoFloodClient
 from app.ingestion.kma_earthquake import KmaEarthquakeClient
 from app.ingestion.kma_warnings import KmaWarningClient
+from app.ingestion.safety_disaster import SafetyDisasterMessageClient
 from app.models import Event, Notification, Person, PersonTag, Subscription
-from app.models.enums import NotificationChannel, RiskLevel, RiskSource
+from app.models.enums import EventSource, NotificationChannel, RiskLevel, RiskSource
+
+# 긴급재난문자(Option A) 기본 위험도 — 당국이 이미 방송한 경보라 관련 있음으로 보되,
+# 위험엔진 재판정 없이 이 기본값을 매긴다. 필요하면 DST_SE_NM 별 매핑으로 세분화 가능.
+_BROADCAST_RISK_LEVEL = RiskLevel.MEDIUM
 from app.risk.matrix import evaluate_risk
 from app.services.message import generate_notification_message
 from app.services.risk_ai import evaluate_and_log
@@ -65,6 +70,7 @@ def run_ingestion_cycle(db: Session) -> dict:
         KmaWarningClient(settings.kma_warning_api_key),
         KmaEarthquakeClient(settings.kma_earthquake_api_key),
         HrfcoFloodClient(settings.hrfco_api_key),
+        SafetyDisasterMessageClient(settings.safetydata_api_key),
     ]
 
     stored_events: list[Event] = []
@@ -169,21 +175,28 @@ def _notify_subscription_for_event(db: Session, event: Event, subscription: Subs
 
     tags = {t.tag for t in db.scalars(select(PersonTag).where(PersonTag.person_id == person.id))}
 
-    risk_source = RiskSource.MATRIX
-    risk_level = evaluate_risk(
-        event_type=event.event_type,
-        age_group=person.age_group,
-        tags=tags,
-        severity=event.severity,
-    )
-    if risk_level is None:
-        # Layer 1 규칙에 없는 케이스 → Layer 2 LLM 보조 판단 (ai_risk_logs 에 기록됨)
-        risk_level = evaluate_and_log(db, event, subscription, person, tags)
-        risk_source = RiskSource.AI
+    if event.source == EventSource.DISASTER_MESSAGE:
+        # Option A: 재난문자는 당국이 이미 그 지역에 방송한 완성 경보다. 규칙/LLM 위험엔진으로
+        # 재판정하지 않고, 필터를 통과했으면(비재해는 클라이언트에서 이미 제외) 관련 있음으로 보고
+        # 기본 위험도를 매긴다. 개인화는 아래 문구 생성(MSG_CN 기반)에서 이뤄진다.
+        risk_source = RiskSource.BROADCAST
+        risk_level = _BROADCAST_RISK_LEVEL
+    else:
+        risk_source = RiskSource.MATRIX
+        risk_level = evaluate_risk(
+            event_type=event.event_type,
+            age_group=person.age_group,
+            tags=tags,
+            severity=event.severity,
+        )
         if risk_level is None:
-            return False  # LLM 도 실패 — 판단 보류 (임의로 알림 만들지 않음)
-        if risk_level == RiskLevel.LOW:
-            return False  # 판단 기록은 남기되, LOW 는 알림 불필요 (알림 피로 방지)
+            # Layer 1 규칙에 없는 케이스 → Layer 2 LLM 보조 판단 (ai_risk_logs 에 기록됨)
+            risk_level = evaluate_and_log(db, event, subscription, person, tags)
+            risk_source = RiskSource.AI
+            if risk_level is None:
+                return False  # LLM 도 실패 — 판단 보류 (임의로 알림 만들지 않음)
+            if risk_level == RiskLevel.LOW:
+                return False  # 판단 기록은 남기되, LOW 는 알림 불필요 (알림 피로 방지)
 
     # LLM 맞춤 문구 (키 없거나 실패 시 내부에서 템플릿 fallback)
     message = generate_notification_message(event, person, risk_level, tags)

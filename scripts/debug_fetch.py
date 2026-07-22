@@ -84,9 +84,10 @@ TARGETS = [
         "params": {},
     },
     {
-        # 긴급재난문자 (safetydata.go.kr, 키 발급 2026-07-19) — 엔드포인트/파라미터는 추정.
-        # safetydata 공통 패턴: /V2/api/{서비스ID}?serviceKey=...&returnType=json
-        # DSSP-IF-00247 = 재난문자방송 발령현황(추정) — 에러가 나면 응답 메시지로 스펙 역추적.
+        # 긴급재난문자 (safetydata.go.kr, DSSP-IF-00247). 2026-07-22 확인:
+        # - 날짜 필터 = crtDt(YYYYMMDD). 지정한 날짜의 문자만 반환.
+        # - 정렬은 SN 오름차순(오래된 순) → 최신은 마지막 페이지. (여긴 오늘치 앞부분만 덤프)
+        # - header/body 최상위, body 는 리스트 그 자체.
         "name": "safetydata_disaster_msg",
         "url": "https://www.safetydata.go.kr/V2/api/DSSP-IF-00247",
         "params": {
@@ -94,6 +95,7 @@ TARGETS = [
             "returnType": "json",
             "pageNo": 1,
             "numOfRows": 10,
+            "crtDt": _today.strftime("%Y%m%d"),
         },
     },
 ]
