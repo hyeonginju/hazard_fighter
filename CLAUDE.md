@@ -22,9 +22,10 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 **인증 (2026-07-23 전환 완료):** 구글+카카오 소셜 로그인(서버사이드 code 흐름, `app/api/routes/auth.py`) + 30일 HS256 JWT(`app/services/auth.py`) + `get_current_user` 의존성(`app/api/deps.py`) — `user_email` 파라미터 전면 제거. 이메일·비밀번호 미수집, 식별은 users.(auth_provider, provider_user_id) 쌍 유니크. 계정당 보호 대상 상한 users.person_limit(기본 3, 초과 409 — 추후 유료 쿠폰이 올리는 구조). 화면: `/login`(소셜 버튼+지난 로그인 배지) → 콜백이 `/app#token=` fragment 로 JWT 전달 → localStorage 저장. 콘솔 실설정 전엔 로그인 라우트가 503 안내.
 
 **다음 할 일 (우선순위):**
-1. 소셜 로그인 실검증 — 구글/카카오 콘솔 설정 후 .env(JWT_SECRET·GOOGLE_CLIENT_ID/SECRET·KAKAO_REST_API_KEY) 채우고 실로그인. localhost 리다이렉트로 데스크톱 먼저.
-2. 배포 — OAuth 리다이렉트 URI 는 고정 도메인 필요(quick tunnel 불가) → peterju.cloud 서브도메인에 백엔드 올리기. 모바일 실검증은 이후.
-3. (선택) 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(person_limit 확장 BM 연습), 홍수 관측소 동적 선정.
+1. hazard.peterju.cloud 고정 주소 — 네임서버는 Cloudflare 이전 완료(07-23, Firebase 포트폴리오 레코드는 프록시 OFF 유지) → cloudflared named tunnel 설정 → 구글/카카오 콘솔에 배포용 리다이렉트 URI 추가 → 모바일 실검증. 터널 뒤 https 인식을 위해 uvicorn `--proxy-headers` 필요.
+2. (선택) 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(person_limit 확장 BM 연습), 홍수 관측소 동적 선정.
+
+**소셜 로그인 실검증 완료(07-23):** 구글·카카오 실계정 로그인 데스크톱 검증됨. 콘솔 함정 기록 — 카카오 개편 콘솔은 Redirect URI 가 "카카오 로그인" 메뉴가 아니라 **앱 키(REST API 키)별 설정**에 있고, Client Secret 이 기본 활성이라 .env 에 KAKAO_CLIENT_SECRET 필수(없으면 KOE010).
 
 **모바일 테스트 방법:** 웹푸시는 HTTPS 필수(localhost 예외) → `cloudflared tunnel --url http://localhost:8000` 으로 임시 HTTPS 주소 발급 후 폰에서 접속. iPhone 은 Safari "홈 화면에 추가" 필요.
 

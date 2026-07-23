@@ -14,6 +14,7 @@
 대신 aud(우리 client_id)·iss 는 반드시 확인한다.
 카카오는 id_token 대신 access_token 으로 /v2/user/me 를 조회한다 (OIDC 활성화 불필요).
 """
+import logging
 import secrets
 
 import httpx
@@ -30,6 +31,7 @@ from app.models import User
 from app.services.auth import issue_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/me")
@@ -97,6 +99,8 @@ def google_callback(
         timeout=10,
     )
     if token_response.status_code != 200:
+        # 에러 응답에는 토큰이 없고 원인 코드만 있어 로그에 남겨도 안전하다
+        logger.warning("구글 토큰 교환 실패 (%s): %s", token_response.status_code, token_response.text)
         raise HTTPException(status_code=502, detail="구글 토큰 교환에 실패했습니다.")
 
     # 서명 재검증 없이 디코드(위 모듈 docstring 참고) — 단 aud/iss 는 직접 확인.
@@ -169,6 +173,8 @@ def kakao_callback(
         data["client_secret"] = settings.kakao_client_secret
     token_response = httpx.post(_KAKAO_TOKEN_URL, data=data, timeout=10)
     if token_response.status_code != 200:
+        # 에러 응답에는 토큰이 없고 원인 코드(KOE___)만 있어 로그에 남겨도 안전하다
+        logger.warning("카카오 토큰 교환 실패 (%s): %s", token_response.status_code, token_response.text)
         raise HTTPException(status_code=502, detail="카카오 토큰 교환에 실패했습니다.")
 
     # 카카오 회원번호(id)와 닉네임 조회 — access_token 도 서버↔카카오 TLS 직통으로 받은 것

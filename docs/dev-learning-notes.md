@@ -888,7 +888,9 @@ ai_risk_logs 에 같은 근거 문장이 반복된 것으로 캐시 작동도 �
 
 **구현.** ① users 를 `(auth_provider, provider_user_id)` 쌍 유니크로 개편 + `person_limit`(기본 3 — 초과 시 409, 추후 유료 쿠폰이 올리는 구조) — Alembic 0002, 실제 Postgres 적용 확인. ② `/auth/{google,kakao}/login·callback` 서버사이드 code 흐름 + state 쿠키(CSRF) + 30일 HS256 JWT(`app/services/auth.py`) + `get_current_user` 의존성으로 라우트 4개의 `user_email` 파라미터 제거. ③ 화면 분리: `/login`(소셜 버튼 2개+배지) / `/app`(구독 설정+현황, 사용자 바+로그아웃) — 콜백이 `#token=` fragment 로 토큰을 넘기고 프론트가 저장 후 주소창에서 지운다. 테스트 122개(+16): 토큰 위조/만료, 보호 라우트 401, 상한 409, 콜백 흐름(구글 aud 검증 포함, httpx 모킹), 사용자 간 데이터 격리. 브라우저 검증: 토큰 없이 /app→/login 리다이렉트, fragment 핸드오프→"형인님 (카카오 로그인)" 표시, 로그아웃→배지 표시까지 확인.
 
-**남은 것.** 실제 구글/카카오 콘솔 설정(.env)과 실로그인 검증, 배포(OAuth 리다이렉트 URI 는 고정 도메인 필요 — cloudflared quick tunnel 은 주소가 바뀌어 안 됨), 인앱 브라우저 감지·안내, 쿠폰/결제(BM 연습).
+**실검증까지 완료 (같은 날 저녁).** 구글·카카오 콘솔을 실제로 설정하고 실계정 로그인을 양쪽 다 검증했다 — DB 에 google/Peter JU, kakao/주형인 두 계정이 설계대로 별개 생성. 과정에서 만난 실전 이슈 3개: ① 카카오 콘솔이 개편되면서 Redirect URI 등록 위치가 "카카오 로그인 > 일반"에서 **앱 키(REST API 키)별 설정**으로 이동 — 구 가이드가 전부 낡은 상태라 데브톡 공식 답변으로 확인 ② "로그아웃 리다이렉트 URI"(고급 메뉴)에 잘못 등록해 KOE006 — 이름이 비슷한 다른 설정이었다 ③ 새 콘솔은 Client Secret 이 기본 활성이라 토큰 교환이 KOE010(invalid_client)으로 거절 — 에러 응답 로깅을 먼저 심어 원인 코드를 확보한 뒤 `.env` 에 KAKAO_CLIENT_SECRET 추가로 해결. "막히면 추측 말고 로그부터"가 이번에도 통했다. 같은 날 가비아→Cloudflare 네임서버 이전도 완료(레코드 2개: Firebase A + TXT, 프록시 끄기)·전파 확인.
+
+**남은 것.** named tunnel 로 `hazard.peterju.cloud` 고정 주소 확보 + 콘솔에 배포용 리다이렉트 URI 추가 + 모바일 실검증, 인앱 브라우저 감지·안내, 쿠폰/결제(BM 연습).
 
 **면접 한마디.** "요구사항(중복 가입 방지·접근성)을 기술(기기 ID·SMS·소셜)에 바로 매핑하지 않고, 위협 모델을 먼저 분해했습니다 — 남용 방어는 쿼터의 일, 신원 확인은 로그인의 일. 그 결과 비용 0원짜리 조합(소셜 로그인 + 계정당 상한)으로 두 문제를 각자 맞는 도구로 풀었습니다."
 
@@ -912,7 +914,8 @@ ai_risk_logs 에 같은 근거 문장이 반복된 것으로 캐시 작동도 �
 - ~~**알림 dedupe(합치기).**~~ ✅ 2026-07-23 완료 — (보호 대상, 통보문 시그니처)당 알림 1건. 기상특보 한정, Layer 2 LLM 평가 앞에서 차단 (Part 4 일지 참고).
 - ~~**FCM 웹푸시** 실제 발송~~ ✅ 2026-07-22 완료 — 생성/발송 분리 dispatch + v1 서비스계정 OAuth2, 미설정 시 mock. config도 `fcm_project_id`/`fcm_credentials_file`로 교체 (Part 4·3-20 참고). **남은 것**: 실제 서비스계정 JSON 발급 후 실기기 발송 검증, webpush 옵션(아이콘·클릭 시 열 URL) 세분화.
 - ~~**JWT 인증.**~~ ✅ 2026-07-23 완료 — 구글+카카오 소셜 로그인(서버사이드 code 흐름, 이메일 미수집) + 30일 HS256 JWT + `get_current_user` 의존성으로 `user_email` 파라미터 전면 제거. 보호 대상 상한(person_limit 3) 포함 (Part 4·3-23 참고).
-- **소셜 로그인 실검증 + 배포.** 구글/카카오 콘솔 설정(.env: JWT_SECRET·GOOGLE_CLIENT_*·KAKAO_REST_API_KEY) 후 실로그인 검증. OAuth 리다이렉트 URI 는 고정 도메인 필요 → peterju.cloud 서브도메인 실배포가 자연스러운 다음 단계 (quick tunnel 은 주소가 바뀌어 등록 불가).
+- ~~**소셜 로그인 실검증.**~~ ✅ 2026-07-23 완료 — 구글·카카오 콘솔 실설정 + 실계정 로그인 양쪽 검증 (개편 콘솔의 Redirect URI 위치 이동, Client Secret 기본 활성 함정 해결. Part 4 참고).
+- **hazard.peterju.cloud 고정 주소 + 모바일 실검증.** 가비아→Cloudflare 네임서버 이전 완료(2026-07-23) → cloudflared named tunnel 로 고정 서브도메인 확보 → 콘솔에 배포용 리다이렉트 URI 추가 → 모바일 소셜 로그인+푸시 검증. 장기적으로는 클라우드 실배포로 대체.
 - **인앱 브라우저 감지.** 카톡 인앱에서 구글 로그인 차단(`disallowed_useragent`) 안내/외부 브라우저 전환 유도.
 - **쿠폰/결제 (BM 연습).** person_limit 을 올리는 유료 쿠폰 — 구조는 준비됨(users.person_limit), 결제 연동만 얹으면 됨.
 
