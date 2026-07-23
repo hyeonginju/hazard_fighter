@@ -21,10 +21,11 @@
 - **웹 PWA 구독 화면 (2026-07-22)**: `app/static/` 순수 HTML+JS를 FastAPI가 직접 서빙(`GET /app`) — 빌드 도구 없이 uvicorn 하나로 백엔드+프론트. **단일 폼**(이메일+보호 대상+지역)에 CTA 하나 — 알림 권한+FCM 토큰 발급이 관문(실패 시 등록 안 됨). 지역은 표준 행정구역 17개 시도 계단식 드롭다운(districts.js). FCM 서비스워커는 `.env`의 `FCM_WEB_*` 값을 주입해 동적 생성, 포그라운드 수신 핸들러 포함. 설정이 없으면 알림만 비활성(graceful)
 - **이름 기반 지역 매칭 (2026-07-22)**: 사용자의 행정구역명(경주시)과 기상청 예보구역명(경주남부)의 간극을 `crud.regions_match`로 해소 — 시도 표준화(부산광역시↔부산, 전북특별자치도↔전북자치도) + '전체'(시도 단위 특보) + 시군구 접두어 비교. 실기기로 "경주시 구독 ← 경주 4개 구역 특보" 매칭 실증
 - **FCM 실기기 발송 검증 (2026-07-22)**: cloudflared HTTPS 터널 → 모바일 크롬 토큰 발급 → 실발송(FCM v1, 200) → 백그라운드 수신 확인. 과정에서 웹푸시 함정 2개(권한 요청 전 await로 user activation 소진, 포그라운드 메시지 무표시) 수정
+- **알림 dedupe (2026-07-23)**: 예보구역 분할(경주 폭염 → 남부/서부/동부/중북부 4건)로 특보 하나에 푸시가 구역 수만큼 가던 문제 해결 — 같은 보호 대상에게 같은 통보문 시그니처(source·종류·등급·발표시각)의 알림은 1건만 생성. 기상특보 한정(재난문자는 내용이 제각각이라 미적용), Layer 2 LLM 평가 앞에서 차단해 LLM 호출도 절약
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회, 기기 토큰 등록
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 94개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 100개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): JWT 인증(현재 `user_email` 임시 방식), 알림 dedupe(예보구역 분할로 특보 하나에 구역 수만큼 알림이 가는 문제).
+아직 없는 것 (다음): JWT 인증(현재 `user_email` 임시 방식).
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -66,6 +67,11 @@ pytest
 - `test_message_generation.py` — LLM 폴백 체인(quota 소진 시 무료 전환·쿨다운·템플릿 폴백)
 - `test_risk_ai.py` — Layer 2 판단(알림 생성·LOW 필터·판단 보류·캐시·형식 위반 처리)
 - `test_scheduler_guard.py` — 수집 중복 실행 가드
+- `test_hrfco_throttle.py` — 홍수통제소 분당 호출 상한 레이트 리미터(시계·sleep 주입)
+- `test_push_dispatch.py` — 생성/발송 분리 dispatch(멱등 sent_at·재시도·죽은 토큰 정리·mock degrade)
+- `test_region_match.py` — 이름 기반 지역 매칭(시도 표준화·'전체'·접두어, 행정구역명↔예보구역명)
+- `test_dedupe.py` — 알림 dedupe(분할 구역 1건 합치기·새 통보문 재알림·재난문자 미적용·backfill 경로)
+- `test_web_app.py` — PWA 화면 서빙, firebase-config·동적 서비스워커(설정 유무에 따른 degrade)
 - `test_log_redaction.py` — 로그 시크릿 마스킹
 - `test_health.py` — 헬스체크
 
@@ -121,4 +127,5 @@ pytest
 6. ~~FCM 웹푸시 발송~~ ✅ (07-22 — 생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock)
 7. ~~웹(PWA) 구독 관리 화면~~ ✅ (07-22 — 단일 폼+알림 게이트, 행정구역 드롭다운+이름 기반 매칭)
 8. ~~FCM 실기기 발송 검증~~ ✅ (07-22 — HTTPS 터널로 모바일 토큰 발급→실발송→백그라운드 수신 실증)
-9. JWT 인증(`user_email` 임시 방식 대체), 알림 dedupe(같은 특보의 구역 분할 알림 합치기)
+9. ~~알림 dedupe~~ ✅ (07-23 — (보호 대상, 통보문 시그니처)당 1건, 기상특보 한정)
+10. JWT 인증(`user_email` 임시 방식 대체)

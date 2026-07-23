@@ -187,6 +187,27 @@ def _notify_subscription_for_event(db: Session, event: Event, subscription: Subs
     if already is not None:
         return False
 
+    # 예보구역 분할 dedupe: 기상특보 통보문 하나가 구역 수만큼 이벤트로 쪼개져 들어온다
+    # (경주 폭염 → 경주남부/서부/동부/중북부 = 4건). 분할 이벤트들은 같은 통보문에서 나와
+    # (source, 종류, 등급, 발표시각)이 전부 같으므로, 같은 보호 대상에게 이 시그니처의
+    # 알림이 이미 있으면 또 만들지 않는다. 위험도 평가보다 먼저 잘라 Layer 2 LLM 호출도 아낀다.
+    # 기상특보에만 적용 — 재난문자는 같은 시각이라도 문자 내용이 제각각이라 합치면 유실된다.
+    if event.source == EventSource.KMA_WARNING:
+        same_warning = db.scalar(
+            select(Notification)
+            .join(Subscription, Notification.subscription_id == Subscription.id)
+            .join(Event, Notification.event_id == Event.id)
+            .where(
+                Subscription.person_id == subscription.person_id,
+                Event.source == event.source,
+                Event.event_type == event.event_type,
+                Event.severity == event.severity,
+                Event.occurred_at == event.occurred_at,
+            )
+        )
+        if same_warning is not None:
+            return False
+
     tags = {t.tag for t in db.scalars(select(PersonTag).where(PersonTag.person_id == person.id))}
 
     if event.source == EventSource.DISASTER_MESSAGE:
