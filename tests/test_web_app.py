@@ -38,6 +38,13 @@ def test_app_page_served():
     assert "명예소방관" in response.text
 
 
+def test_login_page_served():
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert "카카오로 시작하기" in response.text
+    assert "구글로 시작하기" in response.text
+
+
 def test_static_files_served():
     assert client.get("/static/manifest.json").status_code == 200
     assert client.get("/static/app.js").status_code == 200

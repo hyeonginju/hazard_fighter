@@ -31,12 +31,19 @@ _API_KEY_VARS = (
     "FCM_WEB_APP_ID",
     "FCM_WEB_MESSAGING_SENDER_ID",
     "FCM_VAPID_KEY",
+    # 소셜 로그인도 비움 — 실제 구글/카카오 설정이 있어도 테스트가 OAuth 를 시작하지 않게
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "KAKAO_REST_API_KEY",
+    "KAKAO_CLIENT_SECRET",
 )
 
 
 def pytest_configure(config):
     for var in _API_KEY_VARS:
         os.environ[var] = ""
+    # JWT 는 고정 테스트 시크릿 — 토큰 발급/검증 로직 자체를 테스트하기 위해 필요
+    os.environ["JWT_SECRET"] = "test-jwt-secret"
     # 테스트 중엔 백그라운드 수집 스케줄러를 끈다 (외부 호출·타이밍 비결정성 방지)
     os.environ["SCHEDULER_ENABLED"] = "0"
     # get_settings 는 lru_cache 라 이미 읽힌 설정이 있으면 비워준다

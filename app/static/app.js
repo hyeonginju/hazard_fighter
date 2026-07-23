@@ -1,18 +1,38 @@
 /*
- * 웹 PWA 구독 화면 클라이언트.
+ * 웹 PWA 구독 화면 클라이언트 (로그인 이후 페이지).
  * 빌드 도구 없이 순수 ES 모듈로 동작 — Firebase SDK 는 등록 시점에만 CDN 에서 동적 import.
  *
- * 단일 폼 흐름: 이메일 + 보호 대상 + 지역을 한 번에 적고 "보호 대상 알림 추가하기" →
+ * 인증: 소셜 로그인 콜백이 /app#token=... 으로 우리 JWT 를 넘겨준다(fragment 는 서버
+ * 로그·히스토리에 안 남음). localStorage 에 보관하고 모든 API 호출에
+ * Authorization: Bearer 로 싣는다. 토큰이 없거나 만료(401)면 /login 으로.
+ *
+ * 단일 폼 흐름: 보호 대상 + 지역을 적고 "보호 대상 알림 추가하기" →
  *   ① 알림 권한 + FCM 토큰 발급 (실패하면 여기서 중단 — 알림을 켜야만 등록됨)
  *   ② 보호 대상 생성(같은 호칭 있으면 재사용) → 구독 생성 → 기기 토큰 등록
  *
  * 지역 드롭다운은 표준 행정구역 목록(districts.js)으로 만든다. 공공 API의 예보구역명
  * ('경주남부'·'부산' 등)과의 대응은 백엔드 매칭 규칙(crud.regions_match)이 처리하므로,
  * 사용자는 익숙한 이름(경주시)만 고르면 된다.
- *
- * 인증은 아직 임시(user_email 쿼리/바디) — JWT 붙으면 이 파일의 email 전달부만 바뀐다.
  */
 import { DISTRICTS } from "/static/districts.js";
+
+// ---------- 인증 부트스트랩 (다른 코드보다 먼저) ----------
+// 소셜 로그인 콜백이 넘겨준 토큰을 저장하고 주소창에서 지운다.
+const hashParams = new URLSearchParams(location.hash.slice(1));
+if (hashParams.get("token")) {
+  localStorage.setItem("jwt", hashParams.get("token"));
+  // "지난번에 이 방법으로 로그인했어요" 배지용 (로그인 화면에서 사용)
+  localStorage.setItem("last_provider", hashParams.get("provider") || "");
+  history.replaceState(null, "", "/app");
+}
+if (!localStorage.getItem("jwt")) {
+  location.replace("/login");
+}
+
+function logout() {
+  localStorage.removeItem("jwt");
+  location.replace("/login");
+}
 
 // 백엔드 enum 과 동일한 값 (app/models/enums.py). 화면 선택지로 사용.
 const AGE_GROUPS = ["영유아/아동", "청소년", "성인", "고령"];
@@ -25,19 +45,35 @@ const $ = (sel) => document.querySelector(sel);
 // ---------- API 헬퍼 ----------
 async function api(path, options = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("jwt")}`,
+    },
     ...options,
   });
+  if (res.status === 401) {
+    logout(); // 만료·위조 — 재로그인
+    throw new Error("로그인이 만료됐어요.");
+  }
   if (!res.ok) throw new Error(`${path} 실패 (${res.status}): ${await res.text()}`);
   return res.json();
 }
-const email = () => $("#input-email").value.trim();
-const withEmail = (path) => `${path}?user_email=${encodeURIComponent(email())}`;
+
+// ---------- 사용자 바 ----------
+const PROVIDER_LABEL = { google: "구글", kakao: "카카오" };
+async function initUserBar() {
+  $("#btn-logout").addEventListener("click", logout);
+  try {
+    const me = await api("/auth/me");
+    const name = me.nickname ? `${me.nickname}님` : "안녕하세요!";
+    $("#user-info").textContent = `${name} (${PROVIDER_LABEL[me.provider] || me.provider} 로그인)`;
+  } catch {
+    // 401 이면 api() 가 이미 /login 으로 보냈다
+  }
+}
 
 // ---------- 폼 초기화 ----------
 function initForm() {
-  $("#input-email").value = localStorage.getItem("email") || "";
-
   const ageSelect = $("#input-age-group");
   AGE_GROUPS.forEach((g) => ageSelect.add(new Option(g, g)));
 
@@ -162,21 +198,18 @@ function initRegister() {
     const btn = $("#btn-register");
     btn.disabled = true;
     try {
-      localStorage.setItem("email", email());
-
       // ① 알림이 관문 — 토큰을 못 받으면 등록 자체를 진행하지 않는다.
       const fcmToken = await ensurePushToken(statusEl);
 
       // ② 보호 대상 — 같은 호칭이 이미 있으면 재사용 (지역만 추가하는 경우 중복 방지)
       statusEl.textContent = "등록 중…";
       const label = $("#input-person-label").value.trim();
-      const existing = (await api(withEmail("/persons"))).find((p) => p.label === label);
+      const existing = (await api("/persons")).find((p) => p.label === label);
       const person =
         existing ??
         (await api("/persons", {
           method: "POST",
           body: JSON.stringify({
-            user_email: email(),
             label,
             age_group: $("#input-age-group").value,
             tags: [...$("#input-tags").querySelectorAll("input:checked")].map((c) => c.value),
@@ -187,11 +220,11 @@ function initRegister() {
       const regionId = await resolveRegionId();
       await api("/subscriptions", {
         method: "POST",
-        body: JSON.stringify({ user_email: email(), person_id: person.id, region_id: regionId }),
+        body: JSON.stringify({ person_id: person.id, region_id: regionId }),
       });
       await api("/device-tokens", {
         method: "POST",
-        body: JSON.stringify({ user_email: email(), fcm_token: fcmToken, platform: "web" }),
+        body: JSON.stringify({ fcm_token: fcmToken, platform: "web" }),
       });
 
       statusEl.textContent = "✅ 등록 완료! 특보가 발생하면 이 기기로 푸시가 와요.";
@@ -208,10 +241,9 @@ function initRegister() {
 
 // ---------- 등록된 알림 (구독 목록) ----------
 async function refreshSubscriptions() {
-  if (!email()) return;
   const [subs, persons, allRegions] = await Promise.all([
-    api(withEmail("/subscriptions")),
-    api(withEmail("/persons")),
+    api("/subscriptions"),
+    api("/persons"),
     api("/regions"),
   ]);
   const regionById = Object.fromEntries(allRegions.map((r) => [r.id, r]));
@@ -229,8 +261,7 @@ async function refreshSubscriptions() {
 
 // ---------- 알림 내역 ----------
 async function refreshNotifications() {
-  if (!email()) return;
-  const items = await api(withEmail("/notifications"));
+  const items = await api("/notifications");
   $("#notification-list").innerHTML = items.length
     ? items
         .map((n) => `<li class="risk-${n.risk_level}"><span class="badge">${n.risk_level}</span> ${n.message}
@@ -240,6 +271,7 @@ async function refreshNotifications() {
 }
 
 // ---------- 시작 ----------
+initUserBar();
 initForm();
 initRegionSelects();
 initRegister();

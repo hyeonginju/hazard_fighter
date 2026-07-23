@@ -61,6 +61,22 @@ class Settings(BaseSettings):
             )
         )
 
+    # 인증 (JWT + 소셜 로그인) — 이메일은 수집하지 않고 (프로바이더, 회원번호)로 식별
+    jwt_secret: str | None = None  # HS256 서명키. 없으면 인증 라우트 비활성. env: JWT_SECRET
+    jwt_expires_days: int = 30  # 방문이 드문 서비스라 길게 — 푸시는 JWT 만료와 무관하게 계속 온다
+    google_client_id: str | None = None  # Google Cloud 콘솔 > OAuth 클라이언트. env: GOOGLE_CLIENT_ID
+    google_client_secret: str | None = None  # env: GOOGLE_CLIENT_SECRET
+    kakao_rest_api_key: str | None = None  # Kakao Developers > 앱 키 > REST API 키. env: KAKAO_REST_API_KEY
+    kakao_client_secret: str | None = None  # 콘솔에서 활성화한 경우만 (선택). env: KAKAO_CLIENT_SECRET
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return all((self.jwt_secret, self.google_client_id, self.google_client_secret))
+
+    @property
+    def kakao_oauth_enabled(self) -> bool:
+        return all((self.jwt_secret, self.kakao_rest_api_key))
+
     # 주기 수집 스케줄러 (호출량 예산: docs/dev-learning-notes.md 2026-07-20 항목)
     scheduler_enabled: bool = True  # 테스트에선 conftest 가 0 으로 끔
     ingest_interval_minutes: int = 10  # 10분 = 하루 144사이클, 가장 빡빡한 재난문자(1,000/일)도 14.4%

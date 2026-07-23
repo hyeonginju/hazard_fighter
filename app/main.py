@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
+    auth,
     device_tokens,
     events,
     health,
@@ -42,6 +43,7 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(persons.router)
 app.include_router(regions.router)
 app.include_router(subscriptions.router)

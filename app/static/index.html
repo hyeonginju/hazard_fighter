@@ -16,13 +16,16 @@
   </header>
 
   <main>
-    <!-- 하나의 폼: 이메일 + 보호 대상 + 지역 → 알림 켜기까지 한 번에 -->
+    <!-- 로그인 사용자 정보 (/auth/me) -->
+    <div id="user-bar">
+      <span id="user-info"></span>
+      <button type="button" id="btn-logout" class="small">로그아웃</button>
+    </div>
+
+    <!-- 하나의 폼: 보호 대상 + 지역 → 알림 켜기까지 한 번에 -->
     <section>
       <h2>보호 대상 알림 등록</h2>
       <form id="form-register">
-        <label class="field-label" for="input-email">내 이메일</label>
-        <input type="email" id="input-email" placeholder="you@example.com" required />
-
         <label class="field-label" for="input-person-label">보호 대상</label>
         <input type="text" id="input-person-label" placeholder="호칭 (예: 어머니)" required />
         <select id="input-age-group"></select>

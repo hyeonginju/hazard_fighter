@@ -11,6 +11,14 @@ from sqlalchemy.orm import Session
 from app.models import DeviceToken, Person, PersonTag, Region, Subscription, User
 
 
+class PersonLimitExceeded(Exception):
+    """계정당 보호 대상 상한(users.person_limit) 초과. 라우트에서 409로 변환."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        super().__init__(f"보호 대상은 최대 {limit}명까지 등록할 수 있어요.")
+
+
 def get_or_create_user(db: Session, email: str) -> User:
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
@@ -21,7 +29,35 @@ def get_or_create_user(db: Session, email: str) -> User:
     return user
 
 
+def get_or_create_social_user(
+    db: Session, provider: str, provider_user_id: str, nickname: str | None = None
+) -> User:
+    """소셜 로그인 사용자 get-or-create. 식별자는 (provider, 프로바이더 회원번호) 쌍.
+
+    이메일은 받지 않는다 — 카카오는 이메일 수집에 비즈 앱 전환이 필요하고,
+    구글·카카오를 같이 쓰는 이상 이메일로 계정을 자동 통합하는 건 탈취 벡터라 하지 않는다.
+    닉네임은 화면 표시용으로만 저장하고, 재로그인 시 최신 값으로 갱신한다.
+    """
+    user = db.scalar(
+        select(User).where(User.auth_provider == provider, User.provider_user_id == provider_user_id)
+    )
+    if user is None:
+        user = User(auth_provider=provider, provider_user_id=provider_user_id, nickname=nickname)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif nickname and user.nickname != nickname:
+        user.nickname = nickname
+        db.commit()
+    return user
+
+
 def create_person(db: Session, user: User, label: str, age_group: str, tags: list[str]) -> Person:
+    # 계정당 상한 검사 — 무분별한 구독 남용의 실질 방어선 (알림 1건마다 LLM 호출이 따라오므로)
+    count = len(list_persons(db, user))
+    if count >= user.person_limit:
+        raise PersonLimitExceeded(user.person_limit)
+
     person = Person(user_id=user.id, label=label, age_group=age_group)
     db.add(person)
     db.flush()  # person.id 확보

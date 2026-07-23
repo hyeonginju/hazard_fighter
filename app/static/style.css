@@ -61,6 +61,32 @@ button.small { font-size: 0.75rem; padding: 0.2rem 0.6rem; vertical-align: middl
 
 .status { font-size: 0.85rem; color: #444; margin: 0.6rem 0 0; }
 
+/* 로그인 사용자 바 */
+#user-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #555;
+  padding: 0.2rem 0.2rem 0.8rem;
+}
+#user-bar button { background: #999; }
+
+/* 소셜 로그인 버튼 */
+.login-card { text-align: center; }
+.social-btn {
+  display: block;
+  padding: 0.8rem;
+  border-radius: 8px;
+  margin: 0.6rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.social-btn.kakao { background: #fee500; color: #191919; }
+.social-btn.google { background: #fff; color: #333; border: 1px solid #ccc; }
+.last-badge { display: block; font-weight: 400; font-size: 0.75rem; margin-top: 0.2rem; opacity: 0.75; }
+
 .card-list { list-style: none; padding: 0; margin: 0.8rem 0 0; }
 .card-list li {
   padding: 0.6rem 0.7rem;

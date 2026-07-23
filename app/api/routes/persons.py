@@ -1,17 +1,13 @@
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, EmailStr
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import crud
+from app.api.deps import get_current_user
 from app.database import get_db
+from app.models import User
 from app.schemas.person import PersonCreate, PersonRead
 
 router = APIRouter(prefix="/persons", tags=["persons"])
-
-
-class PersonCreateRequest(PersonCreate):
-    # TODO: JWT 인증이 붙으면 user_email 대신 인증된 사용자에서 가져온다 (Phase 2+).
-    user_email: EmailStr
 
 
 def _to_read(person) -> PersonRead:
@@ -25,13 +21,18 @@ def _to_read(person) -> PersonRead:
 
 
 @router.post("", response_model=PersonRead)
-def create_person(payload: PersonCreateRequest, db: Session = Depends(get_db)):
-    user = crud.get_or_create_user(db, payload.user_email)
-    person = crud.create_person(db, user, payload.label, payload.age_group, payload.tags)
+def create_person(
+    payload: PersonCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        person = crud.create_person(db, user, payload.label, payload.age_group, payload.tags)
+    except crud.PersonLimitExceeded as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return _to_read(person)
 
 
 @router.get("", response_model=list[PersonRead])
-def list_persons(user_email: EmailStr, db: Session = Depends(get_db)):
-    user = crud.get_or_create_user(db, user_email)
+def list_persons(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return [_to_read(p) for p in crud.list_persons(db, user)]

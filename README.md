@@ -22,10 +22,11 @@
 - **이름 기반 지역 매칭 (2026-07-22)**: 사용자의 행정구역명(경주시)과 기상청 예보구역명(경주남부)의 간극을 `crud.regions_match`로 해소 — 시도 표준화(부산광역시↔부산, 전북특별자치도↔전북자치도) + '전체'(시도 단위 특보) + 시군구 접두어 비교. 실기기로 "경주시 구독 ← 경주 4개 구역 특보" 매칭 실증
 - **FCM 실기기 발송 검증 (2026-07-22)**: cloudflared HTTPS 터널 → 모바일 크롬 토큰 발급 → 실발송(FCM v1, 200) → 백그라운드 수신 확인. 과정에서 웹푸시 함정 2개(권한 요청 전 await로 user activation 소진, 포그라운드 메시지 무표시) 수정
 - **알림 dedupe (2026-07-23)**: 예보구역 분할(경주 폭염 → 남부/서부/동부/중북부 4건)로 특보 하나에 푸시가 구역 수만큼 가던 문제 해결 — 같은 보호 대상에게 같은 통보문 시그니처(source·종류·등급·발표시각)의 알림은 1건만 생성. 기상특보 한정(재난문자는 내용이 제각각이라 미적용), Layer 2 LLM 평가 앞에서 차단해 LLM 호출도 절약
+- **소셜 로그인 + JWT 인증 (2026-07-23)**: `user_email` 임시 방식 전면 제거 → 구글+카카오 서버사이드 OAuth(`/auth/*`) + 30일 HS256 JWT + `get_current_user` 의존성. 이메일·비밀번호 미수집 — 식별은 (프로바이더, 회원번호) 쌍. 화면도 분리: `/login`(소셜 버튼 + "지난번 로그인" 배지) / `/app`(구독 설정+현황). **계정당 보호 대상 상한 3명**(users.person_limit — 남용 방지 실질 방어선, 초과 시 409, 추후 유료 쿠폰이 올리는 구조)
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회, 기기 토큰 등록
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 100개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 122개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): JWT 인증(현재 `user_email` 임시 방식).
+아직 없는 것 (다음): 구글/카카오 콘솔 실설정+실로그인 검증, 배포(OAuth 는 고정 도메인 필요), 인앱 브라우저 감지, 쿠폰/결제(BM 연습).
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -71,7 +72,9 @@ pytest
 - `test_push_dispatch.py` — 생성/발송 분리 dispatch(멱등 sent_at·재시도·죽은 토큰 정리·mock degrade)
 - `test_region_match.py` — 이름 기반 지역 매칭(시도 표준화·'전체'·접두어, 행정구역명↔예보구역명)
 - `test_dedupe.py` — 알림 dedupe(분할 구역 1건 합치기·새 통보문 재알림·재난문자 미적용·backfill 경로)
-- `test_web_app.py` — PWA 화면 서빙, firebase-config·동적 서비스워커(설정 유무에 따른 degrade)
+- `test_web_app.py` — PWA 화면 서빙(/app·/login), firebase-config·동적 서비스워커(설정 유무에 따른 degrade)
+- `test_auth.py` — JWT 발급/위조/만료, 보호 라우트 401, 보호 대상 상한 409, 구글/카카오 콜백 흐름(httpx 모킹), 사용자 간 데이터 격리
+- `test_user_accounts.py` — 소셜 사용자 (프로바이더, 회원번호) 식별, person_limit 상한
 - `test_log_redaction.py` — 로그 시크릿 마스킹
 - `test_health.py` — 헬스체크
 
@@ -128,4 +131,5 @@ pytest
 7. ~~웹(PWA) 구독 관리 화면~~ ✅ (07-22 — 단일 폼+알림 게이트, 행정구역 드롭다운+이름 기반 매칭)
 8. ~~FCM 실기기 발송 검증~~ ✅ (07-22 — HTTPS 터널로 모바일 토큰 발급→실발송→백그라운드 수신 실증)
 9. ~~알림 dedupe~~ ✅ (07-23 — (보호 대상, 통보문 시그니처)당 1건, 기상특보 한정)
-10. JWT 인증(`user_email` 임시 방식 대체)
+10. ~~JWT 인증~~ ✅ (07-23 — 구글+카카오 소셜 로그인 + 30일 JWT, 보호 대상 상한 3명)
+11. 소셜 로그인 실검증(콘솔 설정) + peterju.cloud 배포, 인앱 브라우저 감지, 쿠폰/결제(BM 연습)

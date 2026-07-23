@@ -60,8 +60,14 @@ def _firebase_web_config(settings) -> dict:
 
 @router.get("/app", include_in_schema=False)
 def serve_app():
-    """PWA 구독 화면."""
+    """PWA 구독 설정 화면 (로그인 필요 — 토큰 없으면 app.js 가 /login 으로 보낸다)."""
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@router.get("/login", include_in_schema=False)
+def serve_login():
+    """로그인 화면 (구글·카카오 버튼)."""
+    return FileResponse(STATIC_DIR / "login.html")
 
 
 @router.get("/firebase-config")

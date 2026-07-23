@@ -15,13 +15,16 @@
 
 ## 현재 상태 (2026-07-23 기준)
 
-Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 100개 통과.
+Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 122개 통과.
 
 **동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, **이름 기반 지역 매칭**(crud.regions_match — 행정구역명↔예보구역명: 시도 표준화+'전체'+접두어), Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, FCM 웹푸시 발송(생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock — **실기기 검증 완료**), 웹 PWA 구독 화면(GET /app — 단일 폼+알림 게이트, 표준 행정구역 드롭다운 districts.js, 동적 서비스워커, 포그라운드 수신 핸들러), 구독 소급 평가, **알림 dedupe**(2026-07-23 — 예보구역 분할로 특보 하나에 푸시 N건 가던 문제: 같은 보호 대상에게 같은 통보문 시그니처(source·종류·등급·발표시각)면 1건만, 기상특보 한정, LLM 평가 앞에서 차단), LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
 
+**인증 (2026-07-23 전환 완료):** 구글+카카오 소셜 로그인(서버사이드 code 흐름, `app/api/routes/auth.py`) + 30일 HS256 JWT(`app/services/auth.py`) + `get_current_user` 의존성(`app/api/deps.py`) — `user_email` 파라미터 전면 제거. 이메일·비밀번호 미수집, 식별은 users.(auth_provider, provider_user_id) 쌍 유니크. 계정당 보호 대상 상한 users.person_limit(기본 3, 초과 409 — 추후 유료 쿠폰이 올리는 구조). 화면: `/login`(소셜 버튼+지난 로그인 배지) → 콜백이 `/app#token=` fragment 로 JWT 전달 → localStorage 저장. 콘솔 실설정 전엔 로그인 라우트가 503 안내.
+
 **다음 할 일 (우선순위):**
-1. JWT 인증 — 현재 `user_email` 임시 방식(`/persons`·`/subscriptions`·`/notifications`·`/device-tokens`) 대체.
-2. (선택) 홍수 관측소 동적 선정 — river_gauges/gauge_region_maps 테이블 활용해 구독 지역 기반 선정. 스로틀링은 이미 깔림.
+1. 소셜 로그인 실검증 — 구글/카카오 콘솔 설정 후 .env(JWT_SECRET·GOOGLE_CLIENT_ID/SECRET·KAKAO_REST_API_KEY) 채우고 실로그인. localhost 리다이렉트로 데스크톱 먼저.
+2. 배포 — OAuth 리다이렉트 URI 는 고정 도메인 필요(quick tunnel 불가) → peterju.cloud 서브도메인에 백엔드 올리기. 모바일 실검증은 이후.
+3. (선택) 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(person_limit 확장 BM 연습), 홍수 관측소 동적 선정.
 
 **모바일 테스트 방법:** 웹푸시는 HTTPS 필수(localhost 예외) → `cloudflared tunnel --url http://localhost:8000` 으로 임시 HTTPS 주소 발급 후 폰에서 접속. iPhone 은 Safari "홈 화면에 추가" 필요.
 
