@@ -22,12 +22,13 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 **인증 (2026-07-23 전환 완료):** 구글+카카오 소셜 로그인(서버사이드 code 흐름, `app/api/routes/auth.py`) + 30일 HS256 JWT(`app/services/auth.py`) + `get_current_user` 의존성(`app/api/deps.py`) — `user_email` 파라미터 전면 제거. 이메일·비밀번호 미수집, 식별은 users.(auth_provider, provider_user_id) 쌍 유니크. 계정당 보호 대상 상한 users.person_limit(기본 3, 초과 409 — 추후 유료 쿠폰이 올리는 구조). 화면: `/login`(소셜 버튼+지난 로그인 배지) → 콜백이 `/app#token=` fragment 로 JWT 전달 → localStorage 저장. 콘솔 실설정 전엔 로그인 라우트가 503 안내.
 
 **다음 할 일 (우선순위):**
-1. hazard.peterju.cloud 고정 주소 — 네임서버는 Cloudflare 이전 완료(07-23, Firebase 포트폴리오 레코드는 프록시 OFF 유지) → cloudflared named tunnel 설정 → 구글/카카오 콘솔에 배포용 리다이렉트 URI 추가 → 모바일 실검증. 터널 뒤 https 인식을 위해 uvicorn `--proxy-headers` 필요.
-2. (선택) 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(person_limit 확장 BM 연습), 홍수 관측소 동적 선정.
+1. (선택) 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(person_limit 확장 BM 연습), 홍수 관측소 동적 선정, 클라우드 실배포(현재는 맥 로컬 + 터널이라 맥이 꺼지면 서비스도 꺼짐).
+
+**hazard.peterju.cloud 운영 방법 (07-23 구축):** 네임서버는 가비아→Cloudflare 이전됨(포트폴리오 Firebase A레코드는 프록시 OFF 유지 필수). named tunnel `hazard-fighter`(`~/.cloudflared/config.yml`) 가 hazard.peterju.cloud→localhost:8000 연결. 서비스 켜기: ① `uvicorn app.main:app --port 8000 --proxy-headers` (**--proxy-headers 필수** — 없으면 OAuth 리다이렉트가 http 로 생성돼 콘솔 등록값과 불일치) ② `cloudflared tunnel run hazard-fighter`. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있음.
 
 **소셜 로그인 실검증 완료(07-23):** 구글·카카오 실계정 로그인 데스크톱 검증됨. 콘솔 함정 기록 — 카카오 개편 콘솔은 Redirect URI 가 "카카오 로그인" 메뉴가 아니라 **앱 키(REST API 키)별 설정**에 있고, Client Secret 이 기본 활성이라 .env 에 KAKAO_CLIENT_SECRET 필수(없으면 KOE010).
 
-**모바일 테스트 방법:** 웹푸시는 HTTPS 필수(localhost 예외) → `cloudflared tunnel --url http://localhost:8000` 으로 임시 HTTPS 주소 발급 후 폰에서 접속. iPhone 은 Safari "홈 화면에 추가" 필요.
+**모바일 테스트 방법:** `https://hazard.peterju.cloud` 고정 주소 사용 (named tunnel — 위 운영 방법 참고, quick tunnel 은 이제 불필요). iPhone 은 Safari "홈 화면에 추가" 필요.
 
 **긴급재난문자 관련 후속(선택):** 재난문자 전용 폴링 주기 분리(현재는 전 소스 공통 10분 — 재난문자는 2-call/사이클이라 288회/일), `전남광주통합특별시` 같은 비표준 시도명·시도-only(`전체`) 매칭 개선, DST_SE_NM 별 위험도 세분화.
 

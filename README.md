@@ -26,7 +26,9 @@
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회, 기기 토큰 등록
 - Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 122개(전부 DB 서버·외부 API 없이 돎)
 
-아직 없는 것 (다음): named tunnel 고정 주소(`hazard.peterju.cloud`)+모바일 실검증 — 구글·카카오 실로그인은 데스크톱에서 검증 완료(07-23), 네임서버도 Cloudflare 이전 완료. 이후 인앱 브라우저 감지, 쿠폰/결제(BM 연습).
+- **고정 주소 운영 (2026-07-23)**: 가비아→Cloudflare 네임서버 이전 + cloudflared named tunnel 로 `https://hazard.peterju.cloud` 확보 (uvicorn `--proxy-headers` 로 터널 뒤 https 인식). 모바일에서 구글·카카오 실로그인, 구독 등록, FCM 토큰 등록까지 실증
+
+아직 없는 것 (다음): 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(BM 연습), 클라우드 실배포(현재는 로컬 맥 + 터널).
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
