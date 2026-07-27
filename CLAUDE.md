@@ -125,6 +125,7 @@ uvicorn app.main:app --reload      # http://localhost:8000/docs
 - 시간 언급 시 `TZ=Asia/Seoul date`로 한국 시간 확인할 것.
 - 웹푸시 권한 요청(`Notification.requestPermission`)은 버튼 클릭 직후 **첫 번째 await**여야 함 — fetch 등을 먼저 하면 user activation 소진으로 모바일 크롬이 팝업 없이 조용히 거부.
 - FCM 발송 성공(200) ≠ 사용자 눈에 표시됨 — 탭이 포그라운드면 메시지가 페이지로 와서 onMessage 핸들러 없이는 조용히 버려짐. 실기기에서 실제로 겪은 함정.
+- **마이그레이션에 `Base.metadata.create_all()` 쓰지 말 것** — 0001 이 그렇게 돼 있어서, 빈 DB 에 `alembic upgrade head` 하면 0001 이 현재 모델 전체를 만들고 0002 가 "컬럼 이미 있음"으로 죽었다(배포 첫 명령에서 발견). 0001 은 명시적 DDL 로 고정됨. 새 리비전은 `alembic revision --autogenerate` 로 만들고, **빈 DB 에 체인을 재생한 뒤 `DATABASE_URL=... python scripts/verify_schema.py` 로 모델과 대조**할 것.
 - **uvicorn `--proxy-headers` 만으로는 부족** — 신뢰 목록(기본 `127.0.0.1`)에서 온 `X-Forwarded-*` 만 반영한다. cloudflared 터널은 localhost 에서 붙어 통했지만 컨테이너/클라우드는 프록시 IP 가 달라 OAuth 리다이렉트가 http 로 생성된다. Dockerfile 은 `--forwarded-allow-ips=*` 를 함께 준다.
 - **`secrets.compare_digest` 는 비ASCII str 에 TypeError** — 헤더는 latin-1 로 디코드되므로 401 이어야 할 요청이 500 이 된다. 항상 `.encode()` 해서 bytes 로 비교.
 - **로컬에서 `POST /events/ingest` 호출 시 `X-Ingest-Token` 헤더 필요** (`.env` 의 `INGEST_TOKEN`). 미설정이면 503 — 자동 수집(스케줄러)은 함수 직접 호출이라 영향 없음.

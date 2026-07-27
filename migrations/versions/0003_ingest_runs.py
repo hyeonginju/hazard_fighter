@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("duplicates_skipped", sa.Integer(), nullable=True),
         sa.Column("notifications_created", sa.Integer(), nullable=True),
         sa.Column("errors", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
     # 가드가 매 사이클마다 MAX(started_at) 을 읽으므로 인덱스
