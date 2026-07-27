@@ -21,7 +21,7 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 
 **인증 (2026-07-23 전환 완료):** 구글+카카오 소셜 로그인(서버사이드 code 흐름, `app/api/routes/auth.py`) + 30일 HS256 JWT(`app/services/auth.py`) + `get_current_user` 의존성(`app/api/deps.py`) — `user_email` 파라미터 전면 제거. 이메일·비밀번호 미수집, 식별은 users.(auth_provider, provider_user_id) 쌍 유니크. 계정당 보호 대상 상한 users.person_limit(기본 3, 초과 409 — 추후 유료 쿠폰이 올리는 구조). 화면: `/login`(소셜 버튼+지난 로그인 배지) → 콜백이 `/app#token=` fragment 로 JWT 전달 → localStorage 저장. 콘솔 실설정 전엔 로그인 라우트가 503 안내.
 
-**인앱 브라우저 안내 (2026-07-27):** 카톡 등 앱 안 브라우저는 구글 OAuth 가 차단되고(`disallowed_useragent`) 웹푸시도 막힐 수 있어, `app/static/inapp.js` 가 UA 패턴으로 감지해 `/login`·`/app` 상단 배너로 안내(카카오톡·라인은 기본 브라우저 전환 버튼, 그 외는 주소 복사). 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡음 — 네이버 웨일(UA 에 `NAVER` 포함)이 대표 오탐 위험이라 패턴은 `NAVER(inapp`. UA 규칙표는 node 로 실행해 테스트(node 없으면 skip). 실제 카톡 인앱 확인은 상시 가동 후.
+**인앱 브라우저 안내 (2026-07-27):** 카톡 등 앱 안 브라우저는 구글 OAuth 가 차단되고(`disallowed_useragent`) 웹푸시도 막힐 수 있어, `app/static/inapp.js` 가 UA 패턴으로 감지해 `/login`·`/app` 상단 배너로 안내(카카오톡·라인은 기본 브라우저 전환 버튼, 그 외는 주소 복사). 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡음 — 네이버 웨일(UA 에 `NAVER` 포함)이 대표 오탐 위험이라 패턴은 `NAVER(inapp`. UA 규칙표는 node 로 실행해 테스트(node 없으면 skip). **실제 카카오톡 인앱에서 배너·전환 버튼 실확인 완료(07-27 배포 후).**
 
 **클라우드 배포 준비 완료 (2026-07-27, Cloud Run + Cloud Scheduler 방향):** 주기 실행을 앱 밖으로 빼는 구조로 간다 — 배포 시 `SCHEDULER_ENABLED=0` + Cloud Scheduler 가 10분마다 `POST /events/ingest` 호출. 근거는 학습노트 3-25(호출량 예산이 인스턴스 수에 곱해지는 문제). 준비된 것: ① `X-Ingest-Token` 인증(`app/api/deps.py:require_ingest_token`, 미설정 시 503 fail-closed) ② 가드 상태를 `ingest_runs` 테이블로(Alembic 0003) ③ Dockerfile(python 3.12, `$PORT`, `--proxy-headers --forwarded-allow-ips=*`) ④ `FCM_CREDENTIALS_JSON` 환경변수 경로 ⑤ 로딩 표시. 마이그레이션은 컨테이너 기동에 넣지 않았으니 **배포 시 1회 별도 실행** 필요.
 
@@ -35,12 +35,11 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 
 기능상 문제는 없다(OAuth 는 client_id/secret 로 동작). `hazard-fighter` 에 결제 연결 완료(Firebase 결제 계정) + run/artifactregistry/cloudbuild/cloudscheduler API 활성화 완료. DB 는 **Neon**(무료 티어, AWS 싱가포르 = Cloud Run 도 `asia-southeast1` 로 맞춘다 — 앱↔DB 거리가 사용자↔앱 거리보다 중요) — 앱은 pooled 접속, alembic 은 direct 접속.
 
-**클라우드 실배포 완료 (2026-07-27):** Cloud Run + Cloud Scheduler + Neon + 도메인 매핑까지 전부 가동 — 맥이 꺼져도 돈다. 실측: 웜 0.3초, 배포 직후 첫 요청 0.32초(startup probe 사전 기동), 실데이터 133건 수집·dedupe·DB 가드 프로덕션 검증. **Neon DB 는 새로 시작(로컬 데이터 미이관)** — 폰에서 재로그인·재구독이 곧 프로덕션 재검증이다(옛 JWT 는 401→자동 로그아웃 정상 경로).
+**클라우드 실배포 완료 + 모바일 실검증 (2026-07-27):** Cloud Run + Cloud Scheduler + Neon + 도메인 매핑까지 전부 가동 — 맥이 꺼져도 돈다. 실측: 웜 0.3초, 배포 직후 첫 요청 0.32초(startup probe 사전 기동), 실데이터 133건 수집·dedupe·DB 가드 프로덕션 검증. **Neon DB 는 새로 시작(로컬 데이터 미이관)** — 폰에서 옛 JWT 401→자동 로그아웃 → 재로그인 → 구독 → **backfill 알림 푸시 수신** → **카톡 인앱 배너 실확인**까지 5단계 전부 통과.
 
 **다음 할 일 (우선순위):**
-1. **모바일 프로덕션 재검증** — 폰에서 hazard.peterju.cloud 로그인 → 구독 → backfill 알림 수신 → 카톡 인앱 배너 실확인.
-2. 쿠폰/결제(person_limit 확장 BM 연습 — 구조는 준비됨).
-3. (선택) 홍수 관측소 동적 선정(+hrfco 해외 IP 차단 대응으로 서울 리전 재검토), 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화, Artifact Registry 옛 이미지 정리.
+1. **쿠폰/결제** (person_limit 확장 BM 연습 — 구조는 준비됨: users.person_limit, 초과 시 409).
+2. (선택) 홍수 관측소 동적 선정(+hrfco 해외 IP 차단 대응으로 서울 리전 재검토), 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화, Artifact Registry 옛 이미지 정리.
 
 **hazard.peterju.cloud 운영 (07-27부터 클라우드 상시 가동):** **Cloud Run 서비스 `hazard-fighter`(asia-southeast1, GCP 프로젝트 `hazard-fighter`)가 서빙한다 — 맥과 무관하게 24시간 돈다.** Cloudflare DNS: `hazard` CNAME → `ghs.googlehosted.com`(DNS only, 도메인 매핑 + 자동 인증서). DB 는 Neon(싱가포르), 수집은 Cloud Scheduler `hazard-ingest`(asia-southeast1, 10분 주기, `X-Ingest-Token` 헤더). 배포 갱신: `gcloud run deploy hazard-fighter --source . --region asia-southeast1`(환경변수는 기존 리비전에서 승계). 환경변수 일괄 갱신은 `.env`→YAML 스크립트(학습노트 07-27 참고). 스키마 변경 시 배포 전에 Neon direct 주소로 `alembic upgrade head` 1회. **hrfco(홍수통제소)는 해외 IP 차단으로 클라우드에서 타임아웃** — 수용 결정(학습노트 07-27), 관측소 동적 선정 때 재검토. (구)로컬 터널 운영: named tunnel `hazard-fighter` 설정은 `~/.cloudflared/` 에 남아 있으나 DNS 가 더 이상 터널을 가리키지 않음. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있고 **콘솔 수정 없이 그대로 유효**(도메인 유지 덕).
 
