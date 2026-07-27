@@ -29,8 +29,9 @@
 - Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 138개(전부 DB 서버·외부 API 없이 돎)
 
 - **고정 주소 운영 (2026-07-23)**: 가비아→Cloudflare 네임서버 이전 + cloudflared named tunnel 로 `https://hazard.peterju.cloud` 확보 (uvicorn `--proxy-headers` 로 터널 뒤 https 인식). 모바일에서 구글·카카오 실로그인, 구독 등록, FCM 토큰 등록까지 실증
+- **클라우드 실배포 (2026-07-27)**: Cloud Run(`asia-southeast1`, scale-to-zero + cpu-boost + max 2) + Neon Postgres(싱가포르, 앱은 pooled·마이그레이션은 direct) + Cloud Scheduler(10분 주기 `POST /events/ingest`, `X-Ingest-Token`) + 도메인 매핑(`hazard.peterju.cloud` CNAME→ghs.googlehosted.com, 자동 인증서) — **맥이 꺼져도 24시간 가동**. 도메인을 유지한 덕에 OAuth 콘솔 수정 0건. 프로덕션 검증: 실데이터 133건 수집, 이벤트 dedupe, DB 가드(인스턴스 간 스킵), https 리다이렉트. 실측 웜 0.3초·배포 직후 0.32초. 발견: hrfco 는 해외 IP 차단으로 클라우드에서 타임아웃 — 손실 정량화 후 수용(학습노트 07-27)
 
-아직 없는 것 (다음): 인앱 브라우저 감지(카톡에서 구글 로그인 차단 안내), 쿠폰/결제(BM 연습), 클라우드 실배포(현재는 로컬 맥 + 터널).
+아직 없는 것 (다음): 모바일 프로덕션 재검증(재로그인·재구독), 쿠폰/결제(BM 연습).
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -140,5 +141,5 @@ pytest
 10. ~~JWT 인증~~ ✅ (07-23 — 구글+카카오 소셜 로그인 + 30일 JWT, 보호 대상 상한 3명)
 11. ~~소셜 로그인 실검증(콘솔 설정) + hazard.peterju.cloud 고정 주소~~ ✅ (07-23 — Cloudflare named tunnel, 모바일 실검증)
 12. ~~인앱 브라우저 감지·안내~~ ✅ (07-27 — UA 감지 + 앱별 탈출 배너, 오탐 회귀 테스트)
-13. 클라우드 실배포(상시 가동) — **앱 쪽 준비 완료**(07-27: 엔드포인트 인증·DB 가드·컨테이너 설정·FCM env·로딩 표시). 남은 것: GCP 프로젝트·관리형 Postgres → Cloud Run 배포 → Cloud Scheduler 로 10분 주기 POST(`SCHEDULER_ENABLED=0`) → DNS 전환 → 콜드/웜 응답시간 측정
+13. ~~클라우드 실배포(상시 가동)~~ ✅ (07-27 — Cloud Run + Cloud Scheduler + Neon + 도메인 매핑, 실데이터·가드·dedupe 프로덕션 검증, 웜 0.3초 실측)
 14. 쿠폰/결제(person_limit 확장 BM 연습)

@@ -1,0 +1,18 @@
+# Cloud Build 에 업로드되는 소스에서 제외할 것들.
+# gcloud 는 .gitignore 를 참고해 자동 생성하기도 하지만, 시크릿은 명시적으로 막는다 —
+# "자동으로 잘 되겠지"에 시크릿을 맡기지 않는다.
+.gcloudignore
+.git/
+.gitignore
+.env
+secrets/
+debug_responses/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docs/
+scripts/
+.claude/
+docker-compose.yml

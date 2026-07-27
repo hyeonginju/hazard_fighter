@@ -35,12 +35,14 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 
 기능상 문제는 없다(OAuth 는 client_id/secret 로 동작). `hazard-fighter` 에 결제 연결 완료(Firebase 결제 계정) + run/artifactregistry/cloudbuild/cloudscheduler API 활성화 완료. DB 는 **Neon**(무료 티어, AWS 싱가포르 = Cloud Run 도 `asia-southeast1` 로 맞춘다 — 앱↔DB 거리가 사용자↔앱 거리보다 중요) — 앱은 pooled 접속, alembic 은 direct 접속.
 
-**다음 할 일 (우선순위):**
-1. **클라우드 실배포 진행** — `hazard-fighter` 프로젝트에 결제 연결 + gcloud 설치·인증(형인이 직접) → API 활성화 → Neon 에 마이그레이션 → Cloud Run 배포(`asia-southeast1`, `SCHEDULER_ENABLED=0`) → Cloud Scheduler 등록 → DNS 를 터널에서 Cloud Run 으로 → 콜드/웜 응답시간 측정(`curl -w "%{time_total}"`).
-2. 쿠폰/결제(person_limit 확장 BM 연습 — 구조는 준비됨).
-3. (선택) 홍수 관측소 동적 선정, 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화.
+**클라우드 실배포 완료 (2026-07-27):** Cloud Run + Cloud Scheduler + Neon + 도메인 매핑까지 전부 가동 — 맥이 꺼져도 돈다. 실측: 웜 0.3초, 배포 직후 첫 요청 0.32초(startup probe 사전 기동), 실데이터 133건 수집·dedupe·DB 가드 프로덕션 검증. **Neon DB 는 새로 시작(로컬 데이터 미이관)** — 폰에서 재로그인·재구독이 곧 프로덕션 재검증이다(옛 JWT 는 401→자동 로그아웃 정상 경로).
 
-**hazard.peterju.cloud 운영 방법 (07-23 구축):** 네임서버는 가비아→Cloudflare 이전됨(포트폴리오 Firebase A레코드는 프록시 OFF 유지 필수). named tunnel `hazard-fighter`(`~/.cloudflared/config.yml`) 가 hazard.peterju.cloud→localhost:8000 연결. 서비스 켜기: ① `uvicorn app.main:app --port 8000 --proxy-headers` (**--proxy-headers 필수** — 없으면 OAuth 리다이렉트가 http 로 생성돼 콘솔 등록값과 불일치) ② `cloudflared tunnel run hazard-fighter`. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있음.
+**다음 할 일 (우선순위):**
+1. **모바일 프로덕션 재검증** — 폰에서 hazard.peterju.cloud 로그인 → 구독 → backfill 알림 수신 → 카톡 인앱 배너 실확인.
+2. 쿠폰/결제(person_limit 확장 BM 연습 — 구조는 준비됨).
+3. (선택) 홍수 관측소 동적 선정(+hrfco 해외 IP 차단 대응으로 서울 리전 재검토), 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화, Artifact Registry 옛 이미지 정리.
+
+**hazard.peterju.cloud 운영 (07-27부터 클라우드 상시 가동):** **Cloud Run 서비스 `hazard-fighter`(asia-southeast1, GCP 프로젝트 `hazard-fighter`)가 서빙한다 — 맥과 무관하게 24시간 돈다.** Cloudflare DNS: `hazard` CNAME → `ghs.googlehosted.com`(DNS only, 도메인 매핑 + 자동 인증서). DB 는 Neon(싱가포르), 수집은 Cloud Scheduler `hazard-ingest`(asia-southeast1, 10분 주기, `X-Ingest-Token` 헤더). 배포 갱신: `gcloud run deploy hazard-fighter --source . --region asia-southeast1`(환경변수는 기존 리비전에서 승계). 환경변수 일괄 갱신은 `.env`→YAML 스크립트(학습노트 07-27 참고). 스키마 변경 시 배포 전에 Neon direct 주소로 `alembic upgrade head` 1회. **hrfco(홍수통제소)는 해외 IP 차단으로 클라우드에서 타임아웃** — 수용 결정(학습노트 07-27), 관측소 동적 선정 때 재검토. (구)로컬 터널 운영: named tunnel `hazard-fighter` 설정은 `~/.cloudflared/` 에 남아 있으나 DNS 가 더 이상 터널을 가리키지 않음. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있고 **콘솔 수정 없이 그대로 유효**(도메인 유지 덕).
 
 **소셜 로그인 실검증 완료(07-23):** 구글·카카오 실계정 로그인 데스크톱 검증됨. 콘솔 함정 기록 — 카카오 개편 콘솔은 Redirect URI 가 "카카오 로그인" 메뉴가 아니라 **앱 키(REST API 키)별 설정**에 있고, Client Secret 이 기본 활성이라 .env 에 KAKAO_CLIENT_SECRET 필수(없으면 KOE010).
 
