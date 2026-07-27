@@ -50,6 +50,7 @@ def _collect_secrets() -> list[str]:
         s.jwt_secret or "",
         s.google_client_secret or "",
         s.kakao_client_secret or "",
+        s.ingest_token or "",
     ]
 
 

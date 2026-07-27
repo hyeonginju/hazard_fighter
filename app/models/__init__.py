@@ -4,6 +4,7 @@ Alembic autogenerate가 테이블을 빠짐없이 인식한다.
 """
 from app.models.device_token import DeviceToken
 from app.models.event import Event
+from app.models.ingest_run import IngestRun
 from app.models.notification import Notification
 from app.models.person import Person, PersonTag
 from app.models.region import Region
@@ -22,6 +23,7 @@ __all__ = [
     "RiskMatrixRule",
     "AIRiskLog",
     "Event",
+    "IngestRun",
     "Notification",
     "RiverGauge",
     "GaugeRegionMap",

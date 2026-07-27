@@ -44,6 +44,8 @@ def pytest_configure(config):
         os.environ[var] = ""
     # JWT 는 고정 테스트 시크릿 — 토큰 발급/검증 로직 자체를 테스트하기 위해 필요
     os.environ["JWT_SECRET"] = "test-jwt-secret"
+    # 수집 엔드포인트 보호 토큰도 고정 — 미설정 상태(503)는 해당 테스트에서 monkeypatch 로 재현
+    os.environ["INGEST_TOKEN"] = "test-ingest-token"
     # 테스트 중엔 백그라운드 수집 스케줄러를 끈다 (외부 호출·타이밍 비결정성 방지)
     os.environ["SCHEDULER_ENABLED"] = "0"
     # get_settings 는 lru_cache 라 이미 읽힌 설정이 있으면 비워준다

@@ -38,8 +38,9 @@ def _setup_subscription(db, sido, sigungu, age_group, tags):
 
 
 def test_all_tables_created_on_sqlite(db):
-    # 12개 테이블이 다이얼렉트 호환 타입으로 SQLite에도 문제없이 생성되는지
-    assert len(Base.metadata.tables) == 12
+    # 13개 테이블이 다이얼렉트 호환 타입으로 SQLite에도 문제없이 생성되는지
+    # (12개 + 2026-07-27 추가된 ingest_runs — 수집 가드 상태를 DB 로 옮긴 것)
+    assert len(Base.metadata.tables) == 13
 
 
 def test_full_ingest_cycle_creates_events(db):

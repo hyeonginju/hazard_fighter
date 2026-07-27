@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True  # 테스트에선 conftest 가 0 으로 끔
     ingest_interval_minutes: int = 10  # 10분 = 하루 144사이클, 가장 빡빡한 재난문자(1,000/일)도 14.4%
     ingest_min_gap_minutes: int = 3  # 수동 /events/ingest 연타 가드 — 이 간격 내 재호출은 스킵
+    # POST /events/ingest 보호 토큰 (X-Ingest-Token 헤더). 배포 후 외부 스케줄러가 쓴다.
+    # 미설정이면 그 엔드포인트는 503 — 설정을 잊었을 때 열려 있는 상태를 만들지 않기 위해.
+    ingest_token: str | None = None  # env: INGEST_TOKEN
 
     # 홍수통제소 분당 호출 상한. 실제 한도 1,000/분의 60% — 관측소를 여러 개 순회할 때
     # 순간적으로 한도를 넘겨 키가 차단(초과 3회)되지 않도록 호출 속도에 상한을 건다.

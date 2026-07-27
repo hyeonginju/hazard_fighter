@@ -9,7 +9,7 @@ FCM 자격증명이 없으면 발송은 no-op(mock) 으로 동작한다.
 """
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -19,7 +19,15 @@ from app.ingestion.hrfco_flood import HrfcoFloodClient
 from app.ingestion.kma_earthquake import KmaEarthquakeClient
 from app.ingestion.kma_warnings import KmaWarningClient
 from app.ingestion.safety_disaster import SafetyDisasterMessageClient
-from app.models import Event, Notification, Person, PersonTag, Region, Subscription
+from app.models import (
+    Event,
+    IngestRun,
+    Notification,
+    Person,
+    PersonTag,
+    Region,
+    Subscription,
+)
 from app.models.enums import EventSource, NotificationChannel, RiskLevel, RiskSource
 
 # 긴급재난문자(Option A) 기본 위험도 — 당국이 이미 방송한 경보라 관련 있음으로 보되,
@@ -31,9 +39,16 @@ from app.services.message import generate_notification_message
 from app.services.risk_ai import evaluate_and_log
 
 
-# 마지막으로 수집 사이클이 "실제로 실행된" 시각 (프로세스 메모리 — 재시작 시 초기화).
-# 스케줄러와 수동 /events/ingest 가 공유하는 가드 상태.
-_last_cycle_at: datetime | None = None
+def _last_run_started_at(db: Session) -> datetime | None:
+    """마지막 수집 사이클의 시작 시각. 없으면 None.
+
+    SQLite 는 타임존 정보를 저장하지 못해 naive 값이 돌아오므로 UTC 로 간주한다
+    (운영 DB인 Postgres 는 timestamptz 라 그대로 aware).
+    """
+    last = db.scalar(select(func.max(IngestRun.started_at)))
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return last
 
 
 def run_ingestion_cycle_guarded(db: Session, min_gap_minutes: int | None = None) -> dict:
@@ -43,23 +58,42 @@ def run_ingestion_cycle_guarded(db: Session, min_gap_minutes: int | None = None)
     이유(호출량 예산, 2026-07-20 분석): 수동 /events/ingest 연타나 스케줄러-수동 겹침이
     그대로 공공 API 호출량으로 이어지는 것을 막는다. 특히 긴급재난문자는 일일 1,000건
     한도라 낭비 호출이 뼈아프다.
+
+    가드 상태는 ingest_runs 테이블에 둔다 (2026-07-27, 원래는 프로세스 메모리).
+    인스턴스가 2개 이상이면 메모리 가드는 서로를 못 봐서 무력해지고, 그건 호출량이
+    인스턴스 수만큼 배가된다는 뜻이다 — 외부 스케줄러 전환의 전제조건.
+    남은 한계: 두 인스턴스가 같은 순간에 조회하면 둘 다 통과할 수 있다(read-then-write
+    경합). 외부 cron 이 단일 호출자라 현실적 위험은 낮고, 필요해지면 DB 레벨 락으로 막는다.
     """
-    global _last_cycle_at
     if min_gap_minutes is None:
         min_gap_minutes = get_settings().ingest_min_gap_minutes
 
     now = datetime.now(timezone.utc)
-    if _last_cycle_at is not None:
-        elapsed = now - _last_cycle_at
+    last_started_at = _last_run_started_at(db)
+    if last_started_at is not None:
+        elapsed = now - last_started_at
         if elapsed < timedelta(minutes=min_gap_minutes):
             return {
                 "skipped": True,
                 "reason": f"최근 {int(elapsed.total_seconds())}초 전에 수집됨 (가드: {min_gap_minutes}분)",
-                "last_cycle_at": _last_cycle_at.isoformat(),
+                "last_cycle_at": last_started_at.isoformat(),
             }
 
-    _last_cycle_at = now
+    # 시작 시각을 먼저 커밋한다 — 다른 인스턴스가 곧바로 이 값을 보고 스킵할 수 있게.
+    run = IngestRun(started_at=now)
+    db.add(run)
+    db.commit()
+
     result = run_ingestion_cycle(db)
+
+    # 이력 마감. 도중에 예외로 죽으면 finished_at 이 NULL 로 남아 "실패한 사이클"로 보인다.
+    run.finished_at = datetime.now(timezone.utc)
+    run.events_ingested = result.get("events_ingested")
+    run.duplicates_skipped = result.get("duplicates_skipped")
+    run.notifications_created = result.get("notifications_created")
+    run.errors = result.get("errors") or None
+    db.commit()
+
     result["skipped"] = False
     return result
 
