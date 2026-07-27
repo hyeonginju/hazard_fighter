@@ -19,7 +19,10 @@ from app.models import Notification
 from app.models.enums import AgeGroup, EventSource, EventType, Severity
 from app.services.ingest import _evaluate_and_notify, _store_event, backfill_subscription
 
-ISSUED_AT = datetime(2026, 7, 22, 2, 0, tzinfo=timezone.utc)  # 통보문 발표시각
+# 통보문 발표시각. 절대 날짜를 박으면 backfill_subscription 의 "최근 48시간" 창을
+# 벗어나 시간이 지난 뒤 테스트가 깨진다(실제로 2026-07-27에 깨졌다). 항상 창 안에 있도록
+# 실행 시각 기준 상대값으로 둔다 (+6시간 한 '새 통보문' 케이스도 창 안에 남는다).
+ISSUED_AT = datetime.now(timezone.utc) - timedelta(hours=12)
 
 
 @pytest.fixture()

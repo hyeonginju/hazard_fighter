@@ -87,6 +87,18 @@ button.small { font-size: 0.75rem; padding: 0.2rem 0.6rem; vertical-align: middl
 .social-btn.google { background: #fff; color: #333; border: 1px solid #ccc; }
 .last-badge { display: block; font-weight: 400; font-size: 0.75rem; margin-top: 0.2rem; opacity: 0.75; }
 
+/* 인앱 브라우저 안내 배너 (inapp.js) */
+.notice {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 12px;
+  padding: 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.notice p { margin: 0 0 0.6rem; }
+.notice button { width: 100%; background: #8d6e00; font-size: 0.9rem; }
+
 .card-list { list-style: none; padding: 0; margin: 0.8rem 0 0; }
 .card-list li {
   padding: 0.6rem 0.7rem;

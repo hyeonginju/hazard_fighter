@@ -16,6 +16,13 @@
   </header>
 
   <main>
+    <!-- 인앱 브라우저(카톡 등) 안내 — inapp.js 가 감지되면 채워서 보여준다 -->
+    <div id="inapp-notice" class="notice" hidden>
+      <p id="inapp-message"></p>
+      <button type="button" id="btn-open-external" hidden>Chrome·Safari 로 열기</button>
+      <button type="button" id="btn-copy-url" hidden>주소 복사하기</button>
+    </div>
+
     <!-- 로그인 사용자 정보 (/auth/me) -->
     <div id="user-bar">
       <span id="user-info"></span>

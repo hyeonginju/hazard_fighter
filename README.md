@@ -23,8 +23,9 @@
 - **FCM 실기기 발송 검증 (2026-07-22)**: cloudflared HTTPS 터널 → 모바일 크롬 토큰 발급 → 실발송(FCM v1, 200) → 백그라운드 수신 확인. 과정에서 웹푸시 함정 2개(권한 요청 전 await로 user activation 소진, 포그라운드 메시지 무표시) 수정
 - **알림 dedupe (2026-07-23)**: 예보구역 분할(경주 폭염 → 남부/서부/동부/중북부 4건)로 특보 하나에 푸시가 구역 수만큼 가던 문제 해결 — 같은 보호 대상에게 같은 통보문 시그니처(source·종류·등급·발표시각)의 알림은 1건만 생성. 기상특보 한정(재난문자는 내용이 제각각이라 미적용), Layer 2 LLM 평가 앞에서 차단해 LLM 호출도 절약
 - **소셜 로그인 + JWT 인증 (2026-07-23)**: `user_email` 임시 방식 전면 제거 → 구글+카카오 서버사이드 OAuth(`/auth/*`) + 30일 HS256 JWT + `get_current_user` 의존성. 이메일·비밀번호 미수집 — 식별은 (프로바이더, 회원번호) 쌍. 화면도 분리: `/login`(소셜 버튼 + "지난번 로그인" 배지) / `/app`(구독 설정+현황). **계정당 보호 대상 상한 3명**(users.person_limit — 남용 방지 실질 방어선, 초과 시 409, 추후 유료 쿠폰이 올리는 구조)
+- **인앱 브라우저 안내 (2026-07-27)**: 카톡 등 앱 안 브라우저로 열면 구글 OAuth 가 정책상 차단(`disallowed_useragent`)되고 웹푸시 등록도 막힐 수 있어, UA 패턴으로 감지해(`app/static/inapp.js`) `/login`·`/app` 상단에 안내 배너 — 카카오톡·라인은 기본 브라우저로 넘기는 버튼(커스텀 스킴/파라미터), 방법이 없는 앱(인스타·페이스북 등)은 주소 복사 안내. 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡고(웨일 등 정상 브라우저 6종 회귀 테스트) node 로 규칙표를 검증
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거, 알림 조회, 기기 토큰 등록
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 122개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 128개(전부 DB 서버·외부 API 없이 돎)
 
 - **고정 주소 운영 (2026-07-23)**: 가비아→Cloudflare 네임서버 이전 + cloudflared named tunnel 로 `https://hazard.peterju.cloud` 확보 (uvicorn `--proxy-headers` 로 터널 뒤 https 인식). 모바일에서 구글·카카오 실로그인, 구독 등록, FCM 토큰 등록까지 실증
 
@@ -77,6 +78,7 @@ pytest
 - `test_web_app.py` — PWA 화면 서빙(/app·/login), firebase-config·동적 서비스워커(설정 유무에 따른 degrade)
 - `test_auth.py` — JWT 발급/위조/만료, 보호 라우트 401, 보호 대상 상한 409, 구글/카카오 콜백 흐름(httpx 모킹), 사용자 간 데이터 격리
 - `test_user_accounts.py` — 소셜 사용자 (프로바이더, 회원번호) 식별, person_limit 상한
+- `test_inapp_browser.py` — 인앱 브라우저 UA 감지(인앱 6종 잡기·정상 브라우저 6종 오탐 없음·앱별 탈출 URL), 배너 마크업 서빙. UA 규칙표는 node 로 실행(node 없으면 skip)
 - `test_log_redaction.py` — 로그 시크릿 마스킹
 - `test_health.py` — 헬스체크
 
@@ -134,4 +136,6 @@ pytest
 8. ~~FCM 실기기 발송 검증~~ ✅ (07-22 — HTTPS 터널로 모바일 토큰 발급→실발송→백그라운드 수신 실증)
 9. ~~알림 dedupe~~ ✅ (07-23 — (보호 대상, 통보문 시그니처)당 1건, 기상특보 한정)
 10. ~~JWT 인증~~ ✅ (07-23 — 구글+카카오 소셜 로그인 + 30일 JWT, 보호 대상 상한 3명)
-11. 소셜 로그인 실검증(콘솔 설정) + peterju.cloud 배포, 인앱 브라우저 감지, 쿠폰/결제(BM 연습)
+11. ~~소셜 로그인 실검증(콘솔 설정) + hazard.peterju.cloud 고정 주소~~ ✅ (07-23 — Cloudflare named tunnel, 모바일 실검증)
+12. ~~인앱 브라우저 감지·안내~~ ✅ (07-27 — UA 감지 + 앱별 탈출 배너, 오탐 회귀 테스트)
+13. 클라우드 실배포(상시 가동 — 현재는 맥이 꺼지면 서비스도 꺼짐) → 쿠폰/결제(person_limit 확장 BM 연습)

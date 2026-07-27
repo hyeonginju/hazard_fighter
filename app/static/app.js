@@ -15,6 +15,7 @@
  * 사용자는 익숙한 이름(경주시)만 고르면 된다.
  */
 import { DISTRICTS } from "/static/districts.js";
+import { showInAppNoticeIfNeeded } from "/static/inapp.js";
 
 // ---------- 인증 부트스트랩 (다른 코드보다 먼저) ----------
 // 소셜 로그인 콜백이 넘겨준 토큰을 저장하고 주소창에서 지운다.
@@ -271,6 +272,7 @@ async function refreshNotifications() {
 }
 
 // ---------- 시작 ----------
+showInAppNoticeIfNeeded(); // 인앱 브라우저면 알림 등록 전에 먼저 안내
 initUserBar();
 initForm();
 initRegionSelects();

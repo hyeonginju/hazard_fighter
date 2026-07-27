@@ -5,6 +5,12 @@
       "name": "hazard-fighter",
       "url": "http://localhost:8000",
       "port": 8000
+    },
+    {
+      "name": "hazard-fighter-ui",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["SCHEDULER_ENABLED=false", ".venv/bin/uvicorn", "app.main:app", "--port", "8000"],
+      "port": 8000
     }
   ]
 }
