@@ -15,7 +15,7 @@
 
 ## 현재 상태 (2026-07-27 기준)
 
-Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 128개 통과.
+Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 138개 통과.
 
 **동작하는 것:** 공공 API 4종 연동(기상특보/지진/홍수통제소/긴급재난문자), 특보 t6 파싱 지역 매칭, **이름 기반 지역 매칭**(crud.regions_match — 행정구역명↔예보구역명: 시도 표준화+'전체'+접두어), Layer 1 규칙 매트릭스, Layer 2 LLM 보조 판단(+ai_risk_logs), 긴급재난문자 Option A(risk_source=broadcast), 홍수통제소 분당 호출 상한 스로틀링, FCM 웹푸시 발송(생성/발송 분리 dispatch + v1 서비스계정, 미설정 시 mock — **실기기 검증 완료**), 웹 PWA 구독 화면(GET /app — 단일 폼+알림 게이트, 표준 행정구역 드롭다운 districts.js, 동적 서비스워커, 포그라운드 수신 핸들러), 구독 소급 평가, **알림 dedupe**(2026-07-23 — 예보구역 분할로 특보 하나에 푸시 N건 가던 문제: 같은 보호 대상에게 같은 통보문 시그니처(source·종류·등급·발표시각)면 1건만, 기상특보 한정, LLM 평가 앞에서 차단), LLM 문구 생성+3단계 폴백 체인, 10분 주기 스케줄러+중복 가드, 로그 시크릿 마스킹.
 
@@ -23,8 +23,10 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 
 **인앱 브라우저 안내 (2026-07-27):** 카톡 등 앱 안 브라우저는 구글 OAuth 가 차단되고(`disallowed_useragent`) 웹푸시도 막힐 수 있어, `app/static/inapp.js` 가 UA 패턴으로 감지해 `/login`·`/app` 상단 배너로 안내(카카오톡·라인은 기본 브라우저 전환 버튼, 그 외는 주소 복사). 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡음 — 네이버 웨일(UA 에 `NAVER` 포함)이 대표 오탐 위험이라 패턴은 `NAVER(inapp`. UA 규칙표는 node 로 실행해 테스트(node 없으면 skip). 실제 카톡 인앱 확인은 상시 가동 후.
 
+**클라우드 배포 준비 완료 (2026-07-27, Cloud Run + Cloud Scheduler 방향):** 주기 실행을 앱 밖으로 빼는 구조로 간다 — 배포 시 `SCHEDULER_ENABLED=0` + Cloud Scheduler 가 10분마다 `POST /events/ingest` 호출. 근거는 학습노트 3-25(호출량 예산이 인스턴스 수에 곱해지는 문제). 준비된 것: ① `X-Ingest-Token` 인증(`app/api/deps.py:require_ingest_token`, 미설정 시 503 fail-closed) ② 가드 상태를 `ingest_runs` 테이블로(Alembic 0003) ③ Dockerfile(python 3.12, `$PORT`, `--proxy-headers --forwarded-allow-ips=*`) ④ `FCM_CREDENTIALS_JSON` 환경변수 경로 ⑤ 로딩 표시. 마이그레이션은 컨테이너 기동에 넣지 않았으니 **배포 시 1회 별도 실행** 필요.
+
 **다음 할 일 (우선순위):**
-1. **클라우드 실배포** (상시 가동 — 현재는 맥 로컬 + 터널이라 맥이 꺼지면 서비스도 꺼짐).
+1. **클라우드 실배포 진행** — GCP 프로젝트·관리형 Postgres 생성(형인이 직접) → Cloud Run 배포 → Cloud Scheduler 등록 → DNS 를 터널에서 Cloud Run 으로 → 콜드/웜 응답시간 측정(`curl -w "%{time_total}"`).
 2. 쿠폰/결제(person_limit 확장 BM 연습 — 구조는 준비됨).
 3. (선택) 홍수 관측소 동적 선정, 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화.
 
@@ -113,5 +115,8 @@ uvicorn app.main:app --reload      # http://localhost:8000/docs
 - 시간 언급 시 `TZ=Asia/Seoul date`로 한국 시간 확인할 것.
 - 웹푸시 권한 요청(`Notification.requestPermission`)은 버튼 클릭 직후 **첫 번째 await**여야 함 — fetch 등을 먼저 하면 user activation 소진으로 모바일 크롬이 팝업 없이 조용히 거부.
 - FCM 발송 성공(200) ≠ 사용자 눈에 표시됨 — 탭이 포그라운드면 메시지가 페이지로 와서 onMessage 핸들러 없이는 조용히 버려짐. 실기기에서 실제로 겪은 함정.
+- **uvicorn `--proxy-headers` 만으로는 부족** — 신뢰 목록(기본 `127.0.0.1`)에서 온 `X-Forwarded-*` 만 반영한다. cloudflared 터널은 localhost 에서 붙어 통했지만 컨테이너/클라우드는 프록시 IP 가 달라 OAuth 리다이렉트가 http 로 생성된다. Dockerfile 은 `--forwarded-allow-ips=*` 를 함께 준다.
+- **`secrets.compare_digest` 는 비ASCII str 에 TypeError** — 헤더는 latin-1 로 디코드되므로 401 이어야 할 요청이 500 이 된다. 항상 `.encode()` 해서 bytes 로 비교.
+- **로컬에서 `POST /events/ingest` 호출 시 `X-Ingest-Token` 헤더 필요** (`.env` 의 `INGEST_TOKEN`). 미설정이면 503 — 자동 수집(스케줄러)은 함수 직접 호출이라 영향 없음.
 - **시간 창을 가진 로직의 테스트에 절대 시각을 박으면 안 됨** — `test_dedupe.py`가 발표시각을 `2026-07-22`로 고정해 뒀다가, `backfill_subscription`의 "최근 48시간" 창을 벗어난 07-27에 깨졌다. 실행 시각 기준 상대값(`now - 12h`)으로 쓸 것.
 - 실데이터 지역명은 행정구역명이 아니라 기상청 예보구역명(부산·경주남부·달성남부 등) — 지역 관련 코드는 `crud.regions_match` 매칭 규칙을 거칠 것.
