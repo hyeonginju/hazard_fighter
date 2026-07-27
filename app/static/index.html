@@ -25,7 +25,7 @@
 
     <!-- 로그인 사용자 정보 (/auth/me) -->
     <div id="user-bar">
-      <span id="user-info"></span>
+      <span id="user-info">불러오는 중…</span>
       <button type="button" id="btn-logout" class="small">로그아웃</button>
     </div>
 
@@ -52,13 +52,14 @@
     <!-- 등록된 알림 (구독 목록) -->
     <section>
       <h2>등록된 알림</h2>
-      <ul id="subscription-list" class="card-list"></ul>
+      <!-- 초기 문구는 로딩 표시 — 서버가 잠들어 있었으면(콜드 스타트) 응답이 몇 초 걸린다 -->
+      <ul id="subscription-list" class="card-list"><li class="empty">불러오는 중…</li></ul>
     </section>
 
     <!-- 알림 내역 -->
     <section>
       <h2>알림 내역 <button id="btn-refresh" class="small">새로고침</button></h2>
-      <ul id="notification-list" class="card-list"></ul>
+      <ul id="notification-list" class="card-list"><li class="empty">불러오는 중…</li></ul>
     </section>
   </main>
 

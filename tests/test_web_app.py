@@ -38,6 +38,12 @@ def test_app_page_served():
     assert "명예소방관" in response.text
 
 
+def test_app_page_has_loading_placeholders():
+    """콜드 스타트로 응답이 늦을 때 빈 화면 대신 로딩 문구가 보여야 한다."""
+    html = client.get("/app").text
+    assert html.count("불러오는 중") >= 3  # 사용자 바 + 구독 목록 + 알림 목록
+
+
 def test_login_page_served():
     response = client.get("/login")
     assert response.status_code == 200

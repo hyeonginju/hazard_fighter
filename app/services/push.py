@@ -36,24 +36,43 @@ class PushResult:
 
 
 class FcmClient:
-    def __init__(self, project_id: str | None, credentials_file: str | None):
+    def __init__(
+        self,
+        project_id: str | None,
+        credentials_file: str | None,
+        credentials_json: str | None = None,
+    ):
         self.project_id = project_id
         self.credentials_file = credentials_file
+        # 서비스계정 JSON 내용 자체 (파일 대신). 클라우드 배포용 —
+        # PaaS 에는 secrets/ 같은 파일을 올릴 곳이 없어 환경변수로 넣는다 (2026-07-27).
+        self.credentials_json = credentials_json
         self._credentials = None  # google-auth Credentials (지연 생성·자동 갱신)
 
     @property
     def enabled(self) -> bool:
-        return bool(self.project_id and self.credentials_file)
+        return bool(self.project_id and (self.credentials_file or self.credentials_json))
 
     def _access_token(self) -> str:
-        """서비스계정으로 OAuth2 액세스 토큰을 얻는다. google-auth 가 만료 시 자동 갱신한다."""
+        """서비스계정으로 OAuth2 액세스 토큰을 얻는다. google-auth 가 만료 시 자동 갱신한다.
+
+        자격증명은 JSON 내용(환경변수) 우선, 없으면 파일 경로. 로컬은 파일이 편하고
+        클라우드는 파일을 못 올리니 둘 다 지원한다.
+        """
         from google.auth.transport.requests import Request
         from google.oauth2 import service_account
 
         if self._credentials is None:
-            self._credentials = service_account.Credentials.from_service_account_file(
-                self.credentials_file, scopes=_SCOPES
-            )
+            if self.credentials_json:
+                import json
+
+                self._credentials = service_account.Credentials.from_service_account_info(
+                    json.loads(self.credentials_json), scopes=_SCOPES
+                )
+            else:
+                self._credentials = service_account.Credentials.from_service_account_file(
+                    self.credentials_file, scopes=_SCOPES
+                )
         if not self._credentials.valid:
             self._credentials.refresh(Request())
         return self._credentials.token
@@ -88,4 +107,8 @@ class FcmClient:
 
 def get_fcm_client() -> FcmClient:
     settings = get_settings()
-    return FcmClient(settings.fcm_project_id, settings.fcm_credentials_file)
+    return FcmClient(
+        settings.fcm_project_id,
+        settings.fcm_credentials_file,
+        settings.fcm_credentials_json,
+    )

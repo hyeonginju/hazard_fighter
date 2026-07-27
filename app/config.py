@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     fcm_project_id: str | None = None  # Firebase 프로젝트 ID (v1 엔드포인트 경로에 들어감). env: FCM_PROJECT_ID
     # 서비스계정 JSON 경로 (secrets/ 아래 권장, gitignore됨). google-auth 관례 이름을 그대로 씀.
     fcm_credentials_file: str | None = Field(default=None, validation_alias="GOOGLE_APPLICATION_CREDENTIALS")
+    # 서비스계정 JSON 내용 자체. 클라우드(PaaS)엔 파일을 올릴 곳이 없어 환경변수로 넣는 경로.
+    # 둘 다 있으면 이쪽이 우선. env: FCM_CREDENTIALS_JSON
+    fcm_credentials_json: str | None = None
 
     # Firebase 웹 클라이언트 설정 (PWA 가 FCM 웹 토큰을 발급받을 때 필요).
     # 서비스계정(위)과 달리 이 값들은 "브라우저에 배포되는 공개 설정"이라 시크릿이 아니다.

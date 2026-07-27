@@ -51,6 +51,7 @@ def _collect_secrets() -> list[str]:
         s.google_client_secret or "",
         s.kakao_client_secret or "",
         s.ingest_token or "",
+        s.fcm_credentials_json or "",  # 서비스계정 private_key 가 들어있다
     ]
 
 

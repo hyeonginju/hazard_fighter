@@ -69,7 +69,8 @@ async function initUserBar() {
     const name = me.nickname ? `${me.nickname}님` : "안녕하세요!";
     $("#user-info").textContent = `${name} (${PROVIDER_LABEL[me.provider] || me.provider} 로그인)`;
   } catch {
-    // 401 이면 api() 가 이미 /login 으로 보냈다
+    // 401 이면 api() 가 이미 /login 으로 보냈다. 그 외 실패면 "불러오는 중…"을 지운다.
+    $("#user-info").textContent = "";
   }
 }
 
@@ -272,12 +273,23 @@ async function refreshNotifications() {
 }
 
 // ---------- 시작 ----------
+// 목록은 HTML 에 "불러오는 중…"이 박혀 있고 아래 fetch 가 채운다. 실패하면 그 문구가
+// 영원히 남으므로 반드시 에러 문구로 바꿔준다.
+// 주의: 이 로딩 표시가 덮어주는 건 "페이지가 뜬 뒤 API 를 기다리는 구간"뿐이다.
+// 서버가 잠들어 있었을 때(콜드 스타트) HTML 자체를 기다리는 시간은 우리 JS 가 아직
+// 실행되기 전이라 손댈 수 없다 — 그 구간은 브라우저 탭의 로딩 표시가 담당한다.
+function showListError(selector) {
+  return () => {
+    $(selector).innerHTML = "<li class='empty'>불러오지 못했어요. 새로고침해 주세요.</li>";
+  };
+}
+
 showInAppNoticeIfNeeded(); // 인앱 브라우저면 알림 등록 전에 먼저 안내
 initUserBar();
 initForm();
 initRegionSelects();
 initRegister();
 $("#btn-refresh").addEventListener("click", refreshNotifications);
-refreshSubscriptions();
-refreshNotifications();
+refreshSubscriptions().catch(showListError("#subscription-list"));
+refreshNotifications().catch(showListError("#notification-list"));
 listenForegroundMessages(); // 이미 알림을 켠 기기는 페이지를 열자마자 포그라운드 수신 대기

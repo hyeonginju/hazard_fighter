@@ -80,6 +80,49 @@ def test_fcm_client_mock_when_not_configured():
     assert result.status == "mock"
 
 
+def test_fcm_client_enabled_by_credentials_json():
+    """클라우드 배포 경로: 파일 없이 JSON 내용(환경변수)만으로도 활성화돼야 한다.
+
+    PaaS 에는 secrets/ 같은 파일을 올릴 곳이 없어서 만든 우회로 (2026-07-27).
+    """
+    client = FcmClient(project_id="proj", credentials_file=None, credentials_json='{"type":"service_account"}')
+    assert client.enabled is True
+
+
+class _FakeCredentials:
+    valid = True
+    token = "ya29.fake"
+
+
+def test_credentials_json_takes_priority_over_file(monkeypatch):
+    """둘 다 있으면 JSON 을 쓴다 — 배포 환경에 남은 낡은 파일 경로에 끌려가지 않도록.
+
+    실제 서비스계정 키 없이 "어느 쪽에서 자격증명을 만들었나"만 확인한다.
+    """
+    from google.oauth2 import service_account
+
+    captured = {}
+
+    def fake_from_info(info, scopes=None):
+        captured["from"] = "info"
+        return _FakeCredentials()
+
+    def fake_from_file(path, scopes=None):
+        captured["from"] = "file"
+        return _FakeCredentials()
+
+    monkeypatch.setattr(service_account.Credentials, "from_service_account_info", fake_from_info)
+    monkeypatch.setattr(service_account.Credentials, "from_service_account_file", fake_from_file)
+
+    client = FcmClient(
+        project_id="proj",
+        credentials_file="/x/sa.json",
+        credentials_json='{"client_email":"a@b.c"}',
+    )
+    assert client._access_token() == "ya29.fake"
+    assert captured["from"] == "info"  # 파일이 아니라 JSON 내용에서 만들었다
+
+
 class _FakeResp:
     def __init__(self, status_code, text=""):
         self.status_code = status_code
