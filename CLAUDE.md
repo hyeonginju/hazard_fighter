@@ -25,8 +25,10 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 
 **클라우드 배포 준비 완료 (2026-07-27, Cloud Run + Cloud Scheduler 방향):** 주기 실행을 앱 밖으로 빼는 구조로 간다 — 배포 시 `SCHEDULER_ENABLED=0` + Cloud Scheduler 가 10분마다 `POST /events/ingest` 호출. 근거는 학습노트 3-25(호출량 예산이 인스턴스 수에 곱해지는 문제). 준비된 것: ① `X-Ingest-Token` 인증(`app/api/deps.py:require_ingest_token`, 미설정 시 503 fail-closed) ② 가드 상태를 `ingest_runs` 테이블로(Alembic 0003) ③ Dockerfile(python 3.12, `$PORT`, `--proxy-headers --forwarded-allow-ips=*`) ④ `FCM_CREDENTIALS_JSON` 환경변수 경로 ⑤ 로딩 표시. 마이그레이션은 컨테이너 기동에 넣지 않았으니 **배포 시 1회 별도 실행** 필요.
 
+**클라우드 자원 관계 (중요 — 중복 생성 방지):** **GCP 프로젝트 `hazard-fighter` 하나에 다 들어 있다** — Firebase(FCM) 설정·서비스계정, 구글 OAuth 클라이언트. Firebase 프로젝트 = GCP 프로젝트라서 07-22 FCM 설정 시점에 이미 만들어져 있었다(새로 만들 필요 없음). **Cloud Run 도 같은 프로젝트에 배포한다** (프로젝트가 IAM·결제·로그의 경계). 단 Spark 플랜엔 결제 계정이 없어 Cloud Run 용 **결제 연결은 필요**. DB 는 **Neon**(무료 티어, AWS 싱가포르 = Cloud Run 도 `asia-southeast1` 로 맞춘다 — 앱↔DB 거리가 사용자↔앱 거리보다 중요) — 앱은 pooled 접속, alembic 은 direct 접속.
+
 **다음 할 일 (우선순위):**
-1. **클라우드 실배포 진행** — GCP 프로젝트·관리형 Postgres 생성(형인이 직접) → Cloud Run 배포 → Cloud Scheduler 등록 → DNS 를 터널에서 Cloud Run 으로 → 콜드/웜 응답시간 측정(`curl -w "%{time_total}"`).
+1. **클라우드 실배포 진행** — `hazard-fighter` 프로젝트에 결제 연결 + gcloud 설치·인증(형인이 직접) → API 활성화 → Neon 에 마이그레이션 → Cloud Run 배포(`asia-southeast1`, `SCHEDULER_ENABLED=0`) → Cloud Scheduler 등록 → DNS 를 터널에서 Cloud Run 으로 → 콜드/웜 응답시간 측정(`curl -w "%{time_total}"`).
 2. 쿠폰/결제(person_limit 확장 BM 연습 — 구조는 준비됨).
 3. (선택) 홍수 관측소 동적 선정, 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화.
 
