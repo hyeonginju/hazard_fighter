@@ -10,6 +10,10 @@
  *   ① 알림 권한 + FCM 토큰 발급 (실패하면 여기서 중단 — 알림을 켜야만 등록됨)
  *   ② 보호 대상 생성(같은 호칭 있으면 재사용) → 구독 생성 → 기기 토큰 등록
  *
+ * 기기 등록은 폼 제출뿐 아니라 페이지를 열 때마다 syncPushToken() 이 다시 맞춘다.
+ * FCM 은 토큰을 무효화하고, 서버는 죽은 토큰을 지우므로(dispatch.py), 재등록 경로가
+ * 폼 하나면 그 뒤로 알림이 영구히 끊긴다 — 2026-07-29 프로덕션에서 실제로 그랬다.
+ *
  * 지역 드롭다운은 표준 행정구역 목록(districts.js)으로 만든다. 공공 API의 예보구역명
  * ('경주남부'·'부산' 등)과의 대응은 백엔드 매칭 규칙(crud.regions_match)이 처리하므로,
  * 사용자는 익숙한 이름(경주시)만 고르면 된다.
@@ -155,6 +159,58 @@ async function listenForegroundMessages() {
   }
 }
 
+// FCM 에게 이 브라우저의 현재 토큰을 물어본다 (권한이 이미 granted 인 상태에서만 호출).
+// localStorage 캐시를 그대로 쓰지 않는 이유: FCM 이 토큰을 무효화해도 캐시엔 죽은 값이
+// 남는다. 그 죽은 값을 다시 등록하면 서버는 다음 발송에서 또 404 를 받고 지우므로,
+// 사용자가 재등록을 해도 낫지 않는다. getToken 은 살아 있으면 같은 값, 죽었으면 새 값을
+// 주니 항상 물어보는 게 맞다. 캐시는 "이 기기에서 알림을 켠 적이 있나" 힌트로만 남긴다.
+async function issuePushToken() {
+  if (!firebaseCfg) firebaseCfg = await api("/firebase-config");
+  if (!firebaseCfg.enabled) {
+    throw new Error("서버에 Firebase 웹 설정이 없어요 (.env 의 FCM_WEB_* 참고).");
+  }
+  const { getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
+  const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  const token = await getToken(await getMessagingInstance(), {
+    vapidKey: firebaseCfg.vapidKey,
+    serviceWorkerRegistration: registration,
+  });
+  localStorage.setItem("fcm_token", token);
+  return token;
+}
+
+// 페이지를 열 때마다 이 기기의 등록 상태를 서버와 맞춘다.
+// 왜 필요한가 (2026-07-29 프로덕션 사고): FCM 이 토큰을 무효화하면 서버는 404 를 받고
+// 죽은 토큰을 지운다(dispatch.py). 그런데 재등록 경로가 "구독 폼 제출"뿐이라, 그 뒤로는
+// 알림이 영구히 안 갔다 — 미발송 알림 8건이 조용히 쌓였다. 등록은 서버에서 멱등하므로
+// (crud.register_device_token) 열 때마다 무조건 POST 해도 안전하다.
+// 주의: 여기서 권한을 "요청"하진 않는다. 권한 팝업은 클릭 직후 첫 await 여야 하고,
+// 페이지 로드 시 자동 팝업은 브라우저가 무시하거나 사용자를 놀라게 한다.
+async function syncPushToken() {
+  const statusEl = $("#push-status");
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) {
+    statusEl.textContent = "ℹ️ 이 브라우저는 웹 푸시를 지원하지 않아요. (iPhone은 Safari에서 '홈 화면에 추가' 후 열어 주세요)";
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    statusEl.textContent =
+      Notification.permission === "denied"
+        ? "🔕 알림이 차단돼 있어요. 주소창 자물쇠(🔒) → 권한 → 알림을 '허용'으로 바꿔 주세요."
+        : "🔔 이 기기는 아직 알림을 받도록 설정되지 않았어요. 아래에서 등록해 주세요.";
+    return;
+  }
+  try {
+    const token = await issuePushToken();
+    await api("/device-tokens", {
+      method: "POST",
+      body: JSON.stringify({ fcm_token: token, platform: "web" }),
+    });
+    statusEl.textContent = "✅ 이 기기로 알림을 받는 중이에요.";
+  } catch {
+    statusEl.textContent = "⚠️ 이 기기의 알림 등록을 확인하지 못했어요. 새로고침해 주세요.";
+  }
+}
+
 async function ensurePushToken(statusEl) {
   if (!("serviceWorker" in navigator) || !("Notification" in window)) {
     throw new Error("이 브라우저는 웹 푸시를 지원하지 않아요. (iPhone은 Safari에서 '홈 화면에 추가' 후 열어 주세요. 카카오톡 등 앱 안 브라우저라면 Chrome/Safari 로 열어 주세요)");
@@ -172,22 +228,8 @@ async function ensurePushToken(statusEl) {
     throw new Error("알림 권한이 허용되지 않았어요. 팝업이 안 보였다면 주소창 근처의 알림(🔔) 표시를 눌러 허용해 주세요.");
   }
 
-  if (!firebaseCfg) firebaseCfg = await api("/firebase-config");
-  if (!firebaseCfg.enabled) {
-    throw new Error("서버에 Firebase 웹 설정이 없어요 (.env 의 FCM_WEB_* 참고).");
-  }
-
-  const cached = localStorage.getItem("fcm_token");
-  if (cached) return cached; // 이미 발급받은 기기 — 재발급 불필요
-
   statusEl.textContent = "푸시 수신 설정 중…";
-  const { getToken } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js");
-  const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-  const token = await getToken(await getMessagingInstance(), {
-    vapidKey: firebaseCfg.vapidKey,
-    serviceWorkerRegistration: registration,
-  });
-  localStorage.setItem("fcm_token", token);
+  const token = await issuePushToken();
   listenForegroundMessages(); // 등록 직후부터 탭이 열려 있어도 알림이 보이게
   return token;
 }
@@ -230,6 +272,7 @@ function initRegister() {
       });
 
       statusEl.textContent = "✅ 등록 완료! 특보가 발생하면 이 기기로 푸시가 와요.";
+      $("#push-status").textContent = "✅ 이 기기로 알림을 받는 중이에요.";
       $("#input-person-label").value = "";
       refreshSubscriptions();
       refreshNotifications(); // 구독 직후 소급 평가(backfill)로 알림이 생겼을 수 있음
@@ -292,4 +335,6 @@ initRegister();
 $("#btn-refresh").addEventListener("click", refreshNotifications);
 refreshSubscriptions().catch(showListError("#subscription-list"));
 refreshNotifications().catch(showListError("#notification-list"));
-listenForegroundMessages(); // 이미 알림을 켠 기기는 페이지를 열자마자 포그라운드 수신 대기
+// 먼저 기기 등록 상태를 서버와 맞추고(죽은 토큰이면 여기서 새 토큰으로 복구된다),
+// 그다음 포그라운드 수신을 대기한다 — 순서를 지켜야 새 토큰으로 리스너가 붙는다.
+syncPushToken().then(listenForegroundMessages);

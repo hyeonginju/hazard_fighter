@@ -44,6 +44,16 @@ def test_app_page_has_loading_placeholders():
     assert html.count("불러오는 중") >= 3  # 사용자 바 + 구독 목록 + 알림 목록
 
 
+def test_app_page_shows_device_push_status():
+    """이 기기가 알림을 받는 상태인지 화면에 보여야 한다.
+
+    2026-07-29: FCM 이 토큰을 무효화해 알림이 끊겼는데 화면엔 아무 표시가 없어서
+    사용자가 알 방법이 없었다. app.js 의 syncPushToken 이 이 자리를 채운다.
+    """
+    html = client.get("/app").text
+    assert 'id="push-status"' in html
+
+
 def test_login_page_served():
     response = client.get("/login")
     assert response.status_code == 200

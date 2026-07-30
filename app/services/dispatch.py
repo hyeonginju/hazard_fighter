@@ -12,6 +12,7 @@ project-spec.md 7절·9절 참고.
 미설정(mock) 시엔 FcmClient 가 실제 발송 없이 성공(mock)을 돌려주므로, 토큰만 등록돼 있으면
 파이프라인 전체가 로컬에서도 끝까지 돈다.
 """
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -21,6 +22,7 @@ from app.models import DeviceToken, Notification, Subscription
 from app.services.push import FcmClient, get_fcm_client
 
 UTC = timezone.utc
+logger = logging.getLogger(__name__)
 
 
 def dispatch_unsent_notifications(db: Session, client: FcmClient | None = None) -> dict:
@@ -62,6 +64,21 @@ def dispatch_unsent_notifications(db: Session, client: FcmClient | None = None) 
             failed += 1  # 유효 토큰이 있었는데 전부 실패 — 재시도 대상
 
     db.commit()
+
+    # 발송은 파이프라인의 마지막 단계라, 여기서 조용히 실패하면 "수집은 잘 되는데
+    # 알림만 안 오는" 상태가 된다. 2026-07-29 프로덕션에서 실제로 그랬다 — 기기 토큰이
+    # 죽어 사라졌는데 로그가 없어 이틀 동안 아무도 몰랐다. 그래서 사람이 알아야 하는
+    # 상황(토큰 정리·보낼 기기 없음·전송 실패)은 WARNING 으로 남긴다.
+    if tokens_removed:
+        logger.warning(
+            "죽은 기기 토큰 %d개 삭제 (FCM UNREGISTERED) — 해당 기기는 /app 을 다시 열어야 재등록된다",
+            tokens_removed,
+        )
+    if no_target:
+        logger.warning("보낼 기기가 없어 대기 중인 알림 %d건 (등록된 기기 토큰 없음)", no_target)
+    if failed:
+        logger.warning("발송 실패로 다음 사이클에 재시도할 알림 %d건", failed)
+
     return {
         "unsent_seen": len(unsent),
         "sent": sent,

@@ -5,6 +5,7 @@ FCM 웹푸시 발송 + dispatch 단계 테스트.
 - 실발송 경로는 _access_token 과 httpx.post 를 monkeypatch 로 가짜 응답으로 바꿔 검증.
 - dispatch 는 클라이언트를 주입받아 발송 결과를 시나리오별로 흉내낸다.
 """
+import logging
 from datetime import datetime, timezone
 
 import pytest
@@ -246,6 +247,42 @@ def test_dispatch_removes_invalid_token(db):
     assert list(db.scalars(select(DeviceToken))) == []  # 죽은 토큰 정리됨
     db.refresh(notif)
     assert notif.sent_at is None  # 재시도 대상
+
+
+# --- 관측성: 조용히 실패하지 않게 로그를 남기나 -------------------------------
+# 2026-07-29 프로덕션에서 토큰이 죽어 알림이 이틀간 안 나갔는데 로그가 없어 아무도 몰랐다.
+# 그래서 "사람이 알아야 하는 상황"은 WARNING 으로 남는지 테스트로 고정한다.
+
+def test_dispatch_warns_when_token_removed(db, caplog):
+    _make_notification(db)
+    user = crud.get_or_create_user(db, "test@example.com")
+    crud.register_device_token(db, user, "dead-token", DevicePlatform.WEB)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.dispatch"):
+        dispatch_unsent_notifications(db, client=_StubClient(result=PushResult(ok=False, status="invalid_token")))
+
+    assert any("죽은 기기 토큰" in r.getMessage() for r in caplog.records)
+
+
+def test_dispatch_warns_when_no_device_token(db, caplog):
+    _make_notification(db)  # 토큰 등록 안 함
+
+    with caplog.at_level(logging.WARNING, logger="app.services.dispatch"):
+        dispatch_unsent_notifications(db, client=_StubClient())
+
+    assert any("보낼 기기가 없어" in r.getMessage() for r in caplog.records)
+
+
+def test_dispatch_stays_quiet_when_all_sent(db, caplog):
+    """정상 발송은 WARNING 을 남기지 않는다 — 경고가 흔해지면 아무도 안 본다."""
+    _make_notification(db)
+    user = crud.get_or_create_user(db, "test@example.com")
+    crud.register_device_token(db, user, "fcm-abc", DevicePlatform.WEB)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.dispatch"):
+        dispatch_unsent_notifications(db, client=_StubClient())
+
+    assert caplog.records == []
 
 
 def test_dispatch_mock_mode_still_delivers(db):

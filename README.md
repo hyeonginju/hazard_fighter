@@ -26,14 +26,16 @@
 - **인앱 브라우저 안내 (2026-07-27)**: 카톡 등 앱 안 브라우저로 열면 구글 OAuth 가 정책상 차단(`disallowed_useragent`)되고 웹푸시 등록도 막힐 수 있어, UA 패턴으로 감지해(`app/static/inapp.js`) `/login`·`/app` 상단에 안내 배너 — 카카오톡·라인은 기본 브라우저로 넘기는 버튼(커스텀 스킴/파라미터), 방법이 없는 앱(인스타·페이스북 등)은 주소 복사 안내. 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡고(웨일 등 정상 브라우저 6종 회귀 테스트) node 로 규칙표를 검증
 - **클라우드 배포 준비 (2026-07-27)**: ① `POST /events/ingest` 를 `X-Ingest-Token` 헤더로 보호 — 공개 배포 시 아무나 호출하면 공공 API 쿼터·LLM 비용이 낭비되므로. 토큰 미설정이면 503(fail-closed) ② 중복 실행 가드 상태를 프로세스 메모리 → `ingest_runs` 테이블로 이전 — 인스턴스가 여러 개면 메모리 가드는 서로를 못 봐 호출량이 인스턴스 수만큼 배가되기 때문. 겸해서 실행 이력이 남는다 ③ 컨테이너: python 3.12, `$PORT` 주입, `--proxy-headers --forwarded-allow-ips=*`(전자만으로는 부족 — uvicorn 은 신뢰 IP 에서 온 헤더만 반영) ④ FCM 서비스계정을 `FCM_CREDENTIALS_JSON` 환경변수로도 받는다(PaaS 엔 파일을 올릴 곳이 없음) ⑤ 콜드 스타트 대비 로딩 표시
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거(토큰 필요), 알림 조회, 기기 토큰 등록
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 138개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 144개(전부 DB 서버·외부 API 없이 돎)
 
 - **고정 주소 운영 (2026-07-23)**: 가비아→Cloudflare 네임서버 이전 + cloudflared named tunnel 로 `https://hazard.peterju.cloud` 확보 (uvicorn `--proxy-headers` 로 터널 뒤 https 인식). 모바일에서 구글·카카오 실로그인, 구독 등록, FCM 토큰 등록까지 실증
 - **클라우드 실배포 (2026-07-27)**: Cloud Run(`asia-southeast1`, scale-to-zero + cpu-boost + max 2) + Neon Postgres(싱가포르, 앱은 pooled·마이그레이션은 direct) + Cloud Scheduler(10분 주기 `POST /events/ingest`, `X-Ingest-Token`) + 도메인 매핑(`hazard.peterju.cloud` CNAME→ghs.googlehosted.com, 자동 인증서) — **맥이 꺼져도 24시간 가동**. 도메인을 유지한 덕에 OAuth 콘솔 수정 0건. 프로덕션 검증: 실데이터 133건 수집, 이벤트 dedupe, DB 가드(인스턴스 간 스킵), https 리다이렉트. 실측 웜 0.3초·배포 직후 0.32초. 발견: hrfco 는 해외 IP 차단으로 클라우드에서 타임아웃 — 손실 정량화 후 수용(학습노트 07-27)
 
 - **프로덕션 모바일 실검증 (2026-07-27)**: 폰에서 옛 JWT 401→자동 로그아웃 → 소셜 재로그인 → 보호 대상·지역 구독 → **backfill 알림 푸시 수신** → 카톡으로 링크를 보내 **인앱 배너·"Chrome·Safari로 열기" 실확인**까지 5단계 통과
 
-아직 없는 것 (다음): 쿠폰/결제(person_limit 확장 BM 연습).
+- **프로덕션 점검 + 조용한 실패 수정 (2026-07-30)**: 배포 3일 뒤 로그·DB·비용 점검에서 **겉보기 지표는 전부 정상인데 알림만 이틀째 안 나가던 상태**를 발견(등록 기기 토큰 0개, 미발송 8건). 원인 두 겹 — ① 죽은 토큰(FCM 404)은 자동 정리하는데 **재등록 경로가 구독 폼 제출뿐**이라 한 번 끊기면 영구 중단(게다가 localStorage 캐시가 죽은 토큰을 붙들어 재등록해도 안 나음) ② `ingest`·`dispatch` 에 로그가 한 줄도 없어 무음 — 스케줄러를 앱 밖으로 빼면서 결과 dict 를 보던 사람이 사라졌다. 수정: 사이클 요약 INFO + 사람이 알아야 할 상황만 WARNING(정상일 때 조용한 것까지 테스트로 고정), `/app` 열 때마다 현재 토큰을 FCM 에 물어 서버와 동기화(멱등), 화면에 "이 기기로 알림 받는 중" 배지. 비용 실측: Cloud Run CPU 무료 한도의 64% — 그중 **hrfco 타임아웃 15초가 사이클의 57%**
+
+아직 없는 것 (다음): 알림 신선도 필터(공공 API 가 2023년 레코드를 준 사례), 재난문자 페이지 경계 유실 보완, `/` 리다이렉트, 쿠폰/결제(person_limit 확장 BM 연습).
 
 개발 과정·기술 결정의 상세 기록은 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md) 참고.
 
@@ -145,4 +147,6 @@ pytest
 12. ~~인앱 브라우저 감지·안내~~ ✅ (07-27 — UA 감지 + 앱별 탈출 배너, 오탐 회귀 테스트)
 13. ~~클라우드 실배포(상시 가동)~~ ✅ (07-27 — Cloud Run + Cloud Scheduler + Neon + 도메인 매핑, 실데이터·가드·dedupe 프로덕션 검증, 웜 0.3초 실측)
 14. ~~프로덕션 모바일 실검증~~ ✅ (07-27 — 재로그인·구독·푸시 수신·카톡 인앱 배너)
-15. 쿠폰/결제(person_limit 확장 BM 연습)
+15. ~~프로덕션 점검 + 관측성·토큰 재등록~~ ✅ (07-30 — 조용한 실패 발견·수정, 사이클 요약 로그 + WARNING 기준, `/app` 열 때 토큰 동기화)
+16. 알림 신선도 필터(2023년 레코드 유입 사례) / 재난문자 페이지 경계 유실 보완 / hrfco 타임아웃 축소 / `/` 리다이렉트
+17. 쿠폰/결제(person_limit 확장 BM 연습)

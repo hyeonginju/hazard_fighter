@@ -29,6 +29,10 @@
       <button type="button" id="btn-logout" class="small">로그아웃</button>
     </div>
 
+    <!-- 이 기기의 푸시 등록 상태 (app.js: syncPushToken).
+         FCM 이 토큰을 무효화하면 알림이 조용히 끊기므로, 상태를 눈에 보이게 둔다. -->
+    <p id="push-status" class="status">알림 기기 확인 중…</p>
+
     <!-- 하나의 폼: 보호 대상 + 지역 → 알림 켜기까지 한 번에 -->
     <section>
       <h2>보호 대상 알림 등록</h2>

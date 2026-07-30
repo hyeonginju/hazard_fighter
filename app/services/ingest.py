@@ -7,6 +7,7 @@ project-spec.md 8절(시스템 아키텍처) 흐름을 그대로 코드로 옮�
 사이클 끝에서 dispatch_unsent_notifications 로 생성과 발송을 분리한다(app/services/dispatch.py).
 FCM 자격증명이 없으면 발송은 no-op(mock) 으로 동작한다.
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -37,6 +38,12 @@ from app.risk.matrix import evaluate_risk
 from app.services.dispatch import dispatch_unsent_notifications
 from app.services.message import generate_notification_message
 from app.services.risk_ai import evaluate_and_log
+
+# 사이클 결과를 로그로 남긴다. 왜 필요한가 (2026-07-30): 스케줄러를 앱 밖(Cloud Scheduler)으로
+# 빼면서 결과 dict 가 HTTP 응답으로 나가고, 그 응답은 Scheduler 가 버린다 — 로컬에선 눈으로
+# 보던 값이 프로덕션에선 아무 데도 안 남는다. "시계를 밖으로 뺐더니 결과를 보던 사람도
+# 같이 없어졌다". 로그 한 줄이 사실상 유일한 관측 창구다.
+logger = logging.getLogger(__name__)
 
 
 def _last_run_started_at(db: Session) -> datetime | None:
@@ -73,9 +80,11 @@ def run_ingestion_cycle_guarded(db: Session, min_gap_minutes: int | None = None)
     if last_started_at is not None:
         elapsed = now - last_started_at
         if elapsed < timedelta(minutes=min_gap_minutes):
+            reason = f"최근 {int(elapsed.total_seconds())}초 전에 수집됨 (가드: {min_gap_minutes}분)"
+            logger.info("수집 사이클 스킵: %s", reason)
             return {
                 "skipped": True,
-                "reason": f"최근 {int(elapsed.total_seconds())}초 전에 수집됨 (가드: {min_gap_minutes}분)",
+                "reason": reason,
                 "last_cycle_at": last_started_at.isoformat(),
             }
 
@@ -124,6 +133,7 @@ def run_ingestion_cycle(db: Session) -> dict:
                     duplicates_skipped += 1
         except Exception as e:  # noqa: BLE001 — 소스별 격리가 목적
             errors[str(client.source)] = f"{type(e).__name__}: {e}"
+            logger.warning("수집 실패 [%s]: %s: %s", client.source, type(e).__name__, e)
 
     notifications_created = 0
     for event in stored_events:  # 신규 이벤트만 평가 — 중복 알림 방지
@@ -132,6 +142,19 @@ def run_ingestion_cycle(db: Session) -> dict:
     # 생성/발송 분리: 새로 만든 알림뿐 아니라 이전 사이클에 못 보낸 것까지 여기서 flush.
     # sent_at 이 가드라 이미 보낸 건 재발송하지 않는다(멱등).
     dispatch = dispatch_unsent_notifications(db)
+
+    logger.info(
+        "수집 사이클 완료: 신규 %d · 중복 %d · 알림생성 %d · 발송 %d/%d (대기 %d, 실패 %d, 토큰정리 %d)%s",
+        len(stored_events),
+        duplicates_skipped,
+        notifications_created,
+        dispatch["sent"],
+        dispatch["unsent_seen"],
+        dispatch["no_target"],
+        dispatch["failed"],
+        dispatch["tokens_removed"],
+        f" · 실패한 소스: {sorted(errors)}" if errors else "",
+    )
 
     return {
         "events_ingested": len(stored_events),

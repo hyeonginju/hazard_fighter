@@ -6,6 +6,7 @@
 2026-07-27: 가드 상태가 모듈 전역 → ingest_runs 테이블로 이동(다중 인스턴스 대응).
 그래서 테스트 간 격리 fixture 도 필요 없어졌다 — DB fixture 가 매 테스트마다 새 DB 다.
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -76,6 +77,27 @@ def test_guard_state_survives_new_session(db):
         assert run_ingestion_cycle_guarded(other_session, min_gap_minutes=3)["skipped"] is True
     finally:
         other_session.close()
+
+
+def test_cycle_logs_summary(db, caplog):
+    """사이클 결과가 로그로 남는지 — Cloud Scheduler 로 옮긴 뒤엔 응답 dict 를 아무도 안 본다.
+
+    Scheduler 는 HTTP 응답을 버리므로, 프로덕션에서 "몇 건 수집했고 몇 건 보냈나" 를
+    확인할 수 있는 유일한 창구가 이 로그 한 줄이다.
+    """
+    with caplog.at_level(logging.INFO, logger="app.services.ingest"):
+        run_ingestion_cycle_guarded(db, min_gap_minutes=3)
+
+    assert any("수집 사이클 완료" in r.getMessage() for r in caplog.records)
+
+
+def test_skipped_cycle_logs_reason(db, caplog):
+    run_ingestion_cycle_guarded(db, min_gap_minutes=3)
+
+    with caplog.at_level(logging.INFO, logger="app.services.ingest"):
+        run_ingestion_cycle_guarded(db, min_gap_minutes=3)
+
+    assert any("수집 사이클 스킵" in r.getMessage() for r in caplog.records)
 
 
 def test_scheduler_disabled_in_tests():
