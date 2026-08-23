@@ -118,6 +118,7 @@ app/logging_utils.py 로그 시크릿 마스킹 필터
 - 매 작업 후 `docs/dev-learning-notes.md`의 **Part 4 개발 일지**에 항목 추가(날짜는 `TZ=Asia/Seoul date`로 확인 — 샌드박스 시계 신뢰 금지). 새 기술 주제는 Part 3에 "개념→이 프로젝트에서→면접 한마디" 3단으로.
 - `README.md`의 "지금 뭐가 되어 있나"·테스트 목록·"다음 순서"도 함께 갱신.
 - docx 변환은 Cowork에서: `pandoc docs/dev-learning-notes.md -f gfm -t docx --toc --toc-depth=2 -V lang=ko -o docs/dev-learning-notes.docx`.
+- **변환 산출물(`*.docx`·`*.pdf`)은 커밋하지 않는다** (2026-08-23부터 gitignore). 저장소엔 소스(`.md`)만 두고 산출물은 필요할 때 재생성한다 — 산출물이 소스보다 뒤처진 채 커밋되는 걸 막기 위해서다. 로컬 파일은 그대로 있고, 08-23 이전 docx 버전은 히스토리에서 꺼낼 수 있다(`git show <커밋>:docs/dev-learning-notes.docx > 복구.docx`).
 
 ## 로컬 실행
 
