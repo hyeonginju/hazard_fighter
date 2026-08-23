@@ -5,6 +5,9 @@
 
 ## 지금 뭐가 되어 있나
 
+> **⏸️ 운영 상태 (2026-08-23):** 수집 스케줄러(Cloud Scheduler `hazard-ingest`)를 **일시중지**했다. 10분 주기 크론이 Neon 의 5분 유휴 타임아웃보다 짧아 DB 가 계속 깨어 있었고(무료 한도 80% 소진), 마침 상류 공공 API 4종이 8/15부터 전부 차단돼 **수집 성과 0인 채로 비용만 쓰고 있었다.** 웹 서비스(`hazard.peterju.cloud`)와 DB 는 그대로 살아 있어 화면·로그인은 정상 동작한다. 배경은 학습노트 [3-27](docs/dev-learning-notes.md)·Part 4 08-23.
+
+
 **Phase 1 완료 + Phase 2 일부 — 실데이터로 개인 맞춤 알림 생성까지 검증됨 (2026-07-17~19):**
 
 - FastAPI 백엔드 + PostgreSQL 스키마 (spec 9절 MVP 범위: users/persons/regions/subscriptions/events/notifications/risk_matrix/river_gauges 등 12개 테이블) — 실제 Postgres(Docker)에 생성 검증
