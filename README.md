@@ -29,7 +29,7 @@
 - **인앱 브라우저 안내 (2026-07-27)**: 카톡 등 앱 안 브라우저로 열면 구글 OAuth 가 정책상 차단(`disallowed_useragent`)되고 웹푸시 등록도 막힐 수 있어, UA 패턴으로 감지해(`app/static/inapp.js`) `/login`·`/app` 상단에 안내 배너 — 카카오톡·라인은 기본 브라우저로 넘기는 버튼(커스텀 스킴/파라미터), 방법이 없는 앱(인스타·페이스북 등)은 주소 복사 안내. 오탐이 미탐보다 비싸다는 기준으로 규칙을 좁게 잡고(웨일 등 정상 브라우저 6종 회귀 테스트) node 로 규칙표를 검증
 - **클라우드 배포 준비 (2026-07-27)**: ① `POST /events/ingest` 를 `X-Ingest-Token` 헤더로 보호 — 공개 배포 시 아무나 호출하면 공공 API 쿼터·LLM 비용이 낭비되므로. 토큰 미설정이면 503(fail-closed) ② 중복 실행 가드 상태를 프로세스 메모리 → `ingest_runs` 테이블로 이전 — 인스턴스가 여러 개면 메모리 가드는 서로를 못 봐 호출량이 인스턴스 수만큼 배가되기 때문. 겸해서 실행 이력이 남는다 ③ 컨테이너: python 3.12, `$PORT` 주입, `--proxy-headers --forwarded-allow-ips=*`(전자만으로는 부족 — uvicorn 은 신뢰 IP 에서 온 헤더만 반영) ④ FCM 서비스계정을 `FCM_CREDENTIALS_JSON` 환경변수로도 받는다(PaaS 엔 파일을 올릴 곳이 없음) ⑤ 콜드 스타트 대비 로딩 표시
 - 기본 REST API: 인물/지역/구독 CRUD(멱등), 이벤트 조회, 수동 ingest 트리거(토큰 필요), 알림 조회, 기기 토큰 등록
-- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 145개(전부 DB 서버·외부 API 없이 돎)
+- Docker Compose (Postgres + app), Alembic 마이그레이션, 테스트 147개(전부 DB 서버·외부 API 없이 돎)
 
 - **고정 주소 운영 (2026-07-23)**: 가비아→Cloudflare 네임서버 이전 + cloudflared named tunnel 로 `https://hazard.peterju.cloud` 확보 (uvicorn `--proxy-headers` 로 터널 뒤 https 인식). 모바일에서 구글·카카오 실로그인, 구독 등록, FCM 토큰 등록까지 실증
 - **클라우드 실배포 (2026-07-27)**: Cloud Run(`asia-southeast1`, scale-to-zero + cpu-boost + max 2) + Neon Postgres(싱가포르, 앱은 pooled·마이그레이션은 direct) + Cloud Scheduler(10분 주기 `POST /events/ingest`, `X-Ingest-Token`) + 도메인 매핑(`hazard.peterju.cloud` CNAME→ghs.googlehosted.com, 자동 인증서) — **맥이 꺼져도 24시간 가동**. 도메인을 유지한 덕에 OAuth 콘솔 수정 0건. 프로덕션 검증: 실데이터 133건 수집, 이벤트 dedupe, DB 가드(인스턴스 간 스킵), https 리다이렉트. 실측 웜 0.3초·배포 직후 0.32초. 발견: hrfco 는 해외 IP 차단으로 클라우드에서 타임아웃 — 손실 정량화 후 수용(학습노트 07-27)
