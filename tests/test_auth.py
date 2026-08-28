@@ -83,6 +83,27 @@ def test_protected_route_requires_token(client):
     assert client.get("/device-tokens").status_code == 401
 
 
+def test_region_write_requires_token_but_read_is_open(client, db):
+    """POST /regions 는 401, GET /regions 는 열어둔다 (2026-08-28).
+
+    저장소를 공개하기 전 점검에서 POST /regions 가 무인증 쓰기인 걸 발견했다.
+    /docs 로 이미 노출돼 있었으니 공개가 만든 위험은 아니지만, Neon 무료 한도를
+    쓰고 있는 지금은 아무나 DB 에 행을 넣을 수 있다는 게 실제 비용이다.
+    읽기는 표준 행정구역 조회표라 막지 않는다 — 그 비대칭을 여기에 고정해 둔다.
+    """
+    denied = client.post("/regions", json={"sido": "경기도", "sigungu": "안양시"})
+    assert denied.status_code == 401
+
+    headers = {"Authorization": f"Bearer {issue_token(_social_user(db))}"}
+    created = client.post("/regions", json={"sido": "경기도", "sigungu": "안양시"}, headers=headers)
+    assert created.status_code == 200
+
+    # 읽기는 토큰 없이도 통과해야 한다 (scripts/demo_layer2.py 가 그렇게 쓴다)
+    listed = client.get("/regions")
+    assert listed.status_code == 200
+    assert [r["id"] for r in listed.json()] == [created.json()["id"]]
+
+
 def test_protected_route_with_valid_token(client, db):
     user = _social_user(db)
     headers = {"Authorization": f"Bearer {issue_token(user)}"}
