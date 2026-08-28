@@ -90,3 +90,39 @@ def test_messaging_sw_contains_config(fcm_web_configured):
     assert "javascript" in response.headers["content-type"]
     assert '"projectId": "test-proj"' in response.text
     assert "onBackgroundMessage" in response.text
+
+
+# --- API 문서 노출 게이팅 (2026-08-28) ----------------------------------------
+
+def test_docs_open_by_default():
+    """로컬 개발 기본값은 켜짐 — README 의 실행 안내가 /docs 를 가리킨다."""
+    assert client.get("/docs").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_docs_closed_when_disabled(monkeypatch):
+    """DOCS_ENABLED=0 이면 /docs 와 스키마가 함께 사라진다.
+
+    스키마(/openapi.json)를 같이 끄는 게 핵심이다 — /docs 만 404 로 만들면
+    사람이 보는 화면만 가려지고 기계가 읽는 목록은 그대로 열려 있어서,
+    "인증 없이 DB 를 건드리는 엔드포인트가 어디인가"를 스캐너에게 계속 알려준다.
+
+    설정은 앱 객체를 만들 때 한 번 읽히므로 모듈을 다시 불러와야 재현된다.
+    """
+    import importlib
+
+    import app.main
+
+    monkeypatch.setenv("DOCS_ENABLED", "0")
+    get_settings.cache_clear()
+    try:
+        closed = TestClient(importlib.reload(app.main).app)
+        assert closed.get("/docs").status_code == 404
+        assert closed.get("/redoc").status_code == 404
+        assert closed.get("/openapi.json").status_code == 404
+        # 문서만 닫힌 것이지 서비스가 닫힌 게 아니다
+        assert closed.get("/health").status_code == 200
+    finally:
+        monkeypatch.delenv("DOCS_ENABLED", raising=False)
+        get_settings.cache_clear()
+        importlib.reload(app.main)  # 다른 테스트를 위해 원상복구

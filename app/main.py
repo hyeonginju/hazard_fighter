@@ -35,11 +35,18 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
+_docs = get_settings().docs_enabled
+
 app = FastAPI(
     title="시켜줘, 명예소방관 API",
     description="공공데이터 기반 개인 맞춤형 이상상황 알림 플랫폼 — Phase 1 뼈대",
     version="0.1.0",
     lifespan=lifespan,
+    # 프로덕션(DOCS_ENABLED=0)에선 셋 다 없앤다. openapi_url 을 같이 끄지 않으면
+    # /docs 만 404 가 되고 스키마는 그대로 열려 있어 막은 의미가 없다.
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
 )
 
 app.include_router(health.router)

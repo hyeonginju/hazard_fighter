@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_ingest_token
+from app.api.deps import get_current_user, require_ingest_token
 from app.database import get_db
-from app.models import Event
+from app.models import Event, User
 from app.schemas.event import EventRead
 from app.services.ingest import run_ingestion_cycle_guarded
 
@@ -29,6 +29,15 @@ def ingest_events(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("", response_model=list[EventRead])
-def list_events(limit: int = 50, db: Session = Depends(get_db)):
+def list_events(
+    limit: int = 50,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """수집된 이벤트 목록. 인증 필요 (2026-08-28).
+
+    regions 와 같은 이유 — 공개 읽기가 Neon 컴퓨트를 깨우는 무료 레버가 된다.
+    이쪽은 사용처도 없었다: 프런트(app.js)는 /events 를 호출하지 않는다.
+    """
     stmt = select(Event).order_by(Event.occurred_at.desc()).limit(limit)
     return list(db.scalars(stmt))

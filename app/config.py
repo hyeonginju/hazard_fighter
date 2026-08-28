@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     # 미설정이면 그 엔드포인트는 503 — 설정을 잊었을 때 열려 있는 상태를 만들지 않기 위해.
     ingest_token: str | None = None  # env: INGEST_TOKEN
 
+    # API 문서(/docs·/redoc·/openapi.json) 노출 여부.
+    # 로컬 개발에선 켜둔다(README 의 실행 안내가 /docs 를 가리킨다). 프로덕션에선 끈다 —
+    # 문서 자체가 비밀은 아니지만, 인증 없이 DB 를 건드리는 엔드포인트 목록을
+    # 스캐너에게 떠먹여 줄 이유가 없다(2026-08-28 과금 표면 점검).
+    docs_enabled: bool = True  # env: DOCS_ENABLED
+
     # 홍수통제소 분당 호출 상한. 실제 한도 1,000/분의 60% — 관측소를 여러 개 순회할 때
     # 순간적으로 한도를 넘겨 키가 차단(초과 3회)되지 않도록 호출 속도에 상한을 건다.
     hrfco_max_requests_per_minute: int = 600

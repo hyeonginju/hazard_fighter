@@ -83,25 +83,37 @@ def test_protected_route_requires_token(client):
     assert client.get("/device-tokens").status_code == 401
 
 
-def test_region_write_requires_token_but_read_is_open(client, db):
-    """POST /regions 는 401, GET /regions 는 열어둔다 (2026-08-28).
+def test_regions_and_events_require_token_both_ways(client, db):
+    """/regions 와 /events 는 읽기·쓰기 모두 인증이 필요하다 (2026-08-28).
 
-    저장소를 공개하기 전 점검에서 POST /regions 가 무인증 쓰기인 걸 발견했다.
-    /docs 로 이미 노출돼 있었으니 공개가 만든 위험은 아니지만, Neon 무료 한도를
-    쓰고 있는 지금은 아무나 DB 에 행을 넣을 수 있다는 게 실제 비용이다.
-    읽기는 표준 행정구역 조회표라 막지 않는다 — 그 비대칭을 여기에 고정해 둔다.
+    두 단계로 좁혔다. 먼저 POST /regions 가 무인증 쓰기인 걸 발견해 막았고,
+    그때 GET 은 "표준 행정구역 목록이라 읽혀도 잃을 게 없다"며 열어뒀다.
+    과금 표면을 따로 점검하다 그 판단이 축을 하나 빠뜨렸다는 게 드러났다 —
+    **공개 읽기는 요청마다 Neon 컴퓨트를 깨운다.** 4분 간격이면 DB 가 종일 깨어
+    있고, 그게 2026-08-23 에 무료 한도 80% 를 태운 바로 그 메커니즘이다.
+
+    데이터가 비밀이라서가 아니라, 계량기를 돌리는 무료 레버라서 막는다.
+    깨질 사용처는 없다 — 프런트는 api() 헬퍼가 늘 JWT 를 싣고, /events 는
+    프런트가 아예 호출하지 않는다.
     """
-    denied = client.post("/regions", json={"sido": "경기도", "sigungu": "안양시"})
-    assert denied.status_code == 401
+    for method, path, body in [
+        ("post", "/regions", {"sido": "경기도", "sigungu": "안양시"}),
+        ("get", "/regions", None),
+        ("get", "/events", None),
+    ]:
+        res = getattr(client, method)(path, **({"json": body} if body else {}))
+        assert res.status_code == 401, f"{method.upper()} {path} 가 인증 없이 통과했다"
 
     headers = {"Authorization": f"Bearer {issue_token(_social_user(db))}"}
-    created = client.post("/regions", json={"sido": "경기도", "sigungu": "안양시"}, headers=headers)
+    created = client.post(
+        "/regions", json={"sido": "경기도", "sigungu": "안양시"}, headers=headers
+    )
     assert created.status_code == 200
 
-    # 읽기는 토큰 없이도 통과해야 한다 (scripts/demo_layer2.py 가 그렇게 쓴다)
-    listed = client.get("/regions")
+    listed = client.get("/regions", headers=headers)
     assert listed.status_code == 200
     assert [r["id"] for r in listed.json()] == [created.json()["id"]]
+    assert client.get("/events", headers=headers).status_code == 200
 
 
 def test_protected_route_with_valid_token(client, db):
