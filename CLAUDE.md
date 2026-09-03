@@ -6,7 +6,6 @@
 > **개발 배경·기술 결정의 상세 기록은 반드시 [`docs/dev-learning-notes.md`](docs/dev-learning-notes.md)를 먼저 읽을 것.**
 > 그 문서에 "왜 이렇게 했는지"(판단 보류 원칙, 호출량 예산, 폴백 체인 등)가 다 담겨 있다.
 > 전체 기획은 [`docs/project-spec.md`](docs/project-spec.md), 사용법은 [`README.md`](README.md).
-> 면접용 예상 질의응답(기술 결정의 근거를 말할 수 있는 형태로 재배열)은 [`docs/interview-qa.md`](docs/interview-qa.md).
 
 ## 사용자 프로필 (중요)
 
