@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>로그인 화면 (데모) — 시켜줘, 명예소방관</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#c62828" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="demo-banner">
+    <strong>정적 데모입니다.</strong> 실제 서비스는 구글·카카오 소셜 로그인 후 30일 JWT 를 발급했습니다.
+    · <a href="/">프로젝트 소개로</a>
+  </div>
+
+  <header>
+    <h1>🚨 시켜줘, 명예소방관</h1>
+    <p class="subtitle">가족 맞춤 안전 알림 구독</p>
+  </header>
+
+  <main>
+    <section class="login-card">
+      <h2>시작하기</h2>
+      <p class="hint">간편 로그인 한 번이면 끝나요. 이메일·비밀번호는 받지 않아요.</p>
+
+      <a class="social-btn kakao" href="#" id="btn-kakao">
+        <span>💬 카카오로 시작하기</span>
+      </a>
+      <a class="social-btn google" href="#" id="btn-google">
+        <span>G 구글로 시작하기</span>
+      </a>
+
+      <p id="login-status" class="status"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p>공공데이터 기반 개인 맞춤형 이상상황 알림 · <a href="/">프로젝트 소개</a></p>
+  </footer>
+
+  <script type="module" src="/static/demo-login.js"></script>
+</body>
+</html>

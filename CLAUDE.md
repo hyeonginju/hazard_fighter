@@ -13,7 +13,7 @@
 - 목적이 FDE 전직이라, **"기술을 왜/어떻게 썼는지"가 코드만큼 중요**하다. 작업할 때마다 결정의 근거를 설명하고 학습 노트에 남긴다.
 - 응답은 한국어. 커밋 메시지도 한국어.
 
-## 현재 상태 (2026-07-30 기준)
+## 현재 상태 (2026-09-04 기준)
 
 Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증됨** (2026-07-22): 공공 API 실데이터 → 이름 기반 지역 매칭 → 위험도 판단(규칙+LLM) → LLM 개인화 문구 → FCM v1 실발송 → 모바일 크롬 백그라운드 수신. 테스트 147개 통과.
 
@@ -24,6 +24,8 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 **⏸️ 수집 스케줄러 일시중지 (2026-08-23):** Neon 무료 한도(100 CU-시간)를 23일 만에 80% 소진했다는 경고를 받고 **Cloud Scheduler `hazard-ingest` 를 `pause` 했다.** 원인은 트래픽이 아니라 **10분 주기 크론이 Neon 의 5분 유휴 타임아웃보다 짧아 scale to zero 가 무력화된 것**(가동률 약 55% → 3.5 CU-시간/일, 실측 80.2÷23=3.49 로 계산 일치). 게다가 아래 1번 장애로 8일째 신규 이벤트 0건이라 **아무것도 수집하지 못하면서 DB 만 깨우고 있었다.** Cloud Run 과 Neon 은 **그대로 살려뒀다** — 포트폴리오 목적이라 `hazard.peterju.cloud` 가 열리는 것 자체가 산출물이고, 방문 시에만 깨어나므로 소비가 미미하다. 재개는 `gcloud scheduler jobs resume hazard-ingest --location=asia-southeast1 --project=hazard-fighter` 한 줄(주기 설정 `*/10` 은 보존됨). **단, 재개 전에 아래 0번(소스 차단)과 1번(신선도 필터)을 먼저 처리할 것** — 안 그러면 소비만 다시 시작되고 미발송 169건이 쏟아진다. 자세한 건 학습노트 3-27·Part 4 08-23.
 
 **🛑 수집 중단 — 고치지 않기로 한 결정 (2026-08-28):** 아래 1번의 원인은 규명됐고, **회복하지 않기로 정했다.** 미해결 과제가 아니라 내린 판단이다 — 다음에 이 파일을 읽는 사람이 반사적으로 달려들지 않도록 구분해 적는다. 근거: ① 실사용자 0명이라 13일 중단 동안 아무 불편이 없었다 ② 밀린 169건은 이미 상한 데이터다 ③ **차단은 남의 방화벽이라 고치는 게 아니라 우회하는 일**이고, Job 분리로 IP 를 매번 다시 뽑아도 측정 성공률 1/3 기준 사이클당 70~80% 가 천장이며 상대가 조이면 다시 내려간다. 포트폴리오 목적에는 **작동하는 크론보다 규명 기록이 더 값나간다**(학습노트 Part 4 08-28 세 번째 항목). **재개하고 싶어지면 아래 조건을 먼저 볼 것.**
+
+**🌐 정적 데모로 전환 (2026-09-04):** `hazard.peterju.cloud` 는 이제 **Cloudflare Pages 가 서빙하는 정적 사이트**다 — Cloud Run 이 아니다. 배경: 8월 GCP 청구서가 351원(hazard-fighter 303원)이라 분해해봤더니 Cloud Run CPU 184원 + egress 74원 + 08-28 IP 조사 Job 17원이었다. 핵심은 **무료 등급이 월 6,000원어치를 흡수하는데 10분 크론이 그걸 3% 넘겨서** 초과분만 청구된 구조였다는 것 — 8월 300원은 "배포만 해둬서" 나온 게 아니라 대부분 크론 비용이고, 08-23 정지 후 9/1 실비용은 1원이었다. 여기서 "동작 테스트는 필요 없고 화면만 보이면 된다"는 판단이 서서, 앱을 정적 스냅샷(`static-site/`)으로 대체하고 호스팅을 무료 Pages 로 옮겼다. **Cloud Run 은 지우지 않고 도메인만 뗐다** — 요청 기반 과금이라 트래픽이 0이면 비용도 0이고, 되살릴 여지를 남기는 값이 지우는 이득보다 크다. 자세한 건 학습노트 Part 4 09-04.
 
 **⚠️ 재개 전 반드시 처리할 것 (장전된 총):** 미발송 **169건**(전부 긴급재난문자, 8/2~8/15, 08-23 로그 기준)이 그대로 있다. 스케줄러를 재개했을 때 기기 토큰이 살아 있으면 **8월 초 재난문자 169건이 한꺼번에 쏟아진다.** 07-30 에 밀린 8건을 `sent_at` 만 찍어 발송에서 제외한(삭제 아님) 것과 같은 처리를 먼저 하거나, 알림 신선도 필터(아래 1번)를 먼저 넣을 것.
 
@@ -59,11 +61,13 @@ Phase 1 완료 + Phase 2 대부분 완료. **실기기까지 end-to-end 실증�
 1. **알림 신선도 필터** — 공공 API 가 2023년 9월 재난문자 185건을 돌려준 사이클이 있었고 그게 알림 2건까지 만들었다. cutoff 는 `backfill_subscription`(48h)에만 있고 평상시 경로엔 없다. 저장은 하되 알림은 만들지 않는 창(24h 등)을 두는 방향.
 2. **재난문자 페이지 경계 유실** — `safety_disaster.py` 의 "총건수로 마지막 페이지만 읽기"가 total 100 경계를 넘을 때 직전 페이지 뒷부분(최대 99건)을 건너뛴다. 마지막 페이지 + 직전 페이지를 같이 읽으면 끝(dedupe 가 중복 흡수).
 3. **hrfco 타임아웃 축소/차단** — 클라우드에서 못 쓰는 소스가 사이클 26.5초의 15초(57%)를 먹고 Cloud Run 무료 CPU 한도의 64% 중 절반가량을 소비한다.
-4. **`/` 리다이렉트 + robots.txt** — 도메인만 치면 404(3일간 89건).
+4. ~~`/` 리다이렉트 + robots.txt~~ — **해결(2026-09-04).** 정적 전환으로 `/` 에 프로젝트 소개 랜딩이 생겨 404 가 사라졌다.
 5. **쿠폰/결제** (person_limit 확장 BM 연습 — 구조는 준비됨: users.person_limit, 초과 시 409). 쿠폰(결제 없이 완결) → 결제(쿠폰 적용을 호출하는 트리거) 순서로. 국내 PG 실결제는 사업자등록·심사가 필요해 테스트 키까지가 현실적.
 6. (선택) 홍수 관측소 동적 선정(+hrfco 해외 IP 차단 대응으로 서울 리전 재검토), 재난문자 폴링 주기 분리, webpush 옵션(아이콘·클릭 URL) 세분화, Artifact Registry 옛 이미지 정리, 예산 알림 설정 확인.
 
-**hazard.peterju.cloud 운영 (07-27부터 클라우드 상시 가동):** **Cloud Run 서비스 `hazard-fighter`(asia-southeast1, GCP 프로젝트 `hazard-fighter`)가 서빙한다 — 맥과 무관하게 24시간 돈다.** Cloudflare DNS: `hazard` CNAME → `ghs.googlehosted.com`(DNS only, 도메인 매핑 + 자동 인증서). DB 는 Neon(싱가포르), 수집은 Cloud Scheduler `hazard-ingest`(asia-southeast1, 10분 주기, `X-Ingest-Token` 헤더) — **2026-08-23 부터 `PAUSED`**(위 ⏸️ 항목 참고, 재개 전 조건 있음). 프로덕션은 `DOCS_ENABLED=0`(API 문서·스키마 비공개, 2026-08-28부터). 배포 갱신: `gcloud run deploy hazard-fighter --source . --region asia-southeast1`(환경변수는 기존 리비전에서 승계). 환경변수 일괄 갱신은 `.env`→YAML 스크립트(학습노트 07-27 참고). 스키마 변경 시 배포 전에 Neon direct 주소로 `alembic upgrade head` 1회. **hrfco(홍수통제소)는 해외 IP 차단으로 클라우드에서 타임아웃** — 수용 결정(학습노트 07-27), 관측소 동적 선정 때 재검토. (구)로컬 터널 운영: named tunnel `hazard-fighter` 설정은 `~/.cloudflared/` 에 남아 있으나 DNS 가 더 이상 터널을 가리키지 않음. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있고 **콘솔 수정 없이 그대로 유효**(도메인 유지 덕).
+**hazard.peterju.cloud 운영 (2026-09-04부터 정적 데모):** **Cloudflare Pages 프로젝트 `hazard-fighter` 가 서빙한다** — 저장소의 `static-site/` 를 올린 순수 정적 사이트라 서버도 DB 도 없다. Cloudflare DNS: `hazard` CNAME → `hazard-fighter.pages.dev`. 배포 갱신은 `npx wrangler pages deploy static-site --project-name=hazard-fighter --branch=main` 한 줄(첫 인증만 `npx wrangler login`). 임시 주소 `https://hazard-fighter.pages.dev` 도 같은 내용을 서빙한다. 화면은 `/`(프로젝트 소개 랜딩) · `/app`(구독 화면 데모) · `/login`(로그인 화면 데모) 세 개이고, **모든 화면 상단에 정적 데모 고지 배너**가 있다 — 포트폴리오 카드에 `LIVE` 라고 적어둔 것과 어긋나지 않게 하려는 장치다. 쓰기 동작(등록·로그인)은 안내 문구로 대체했고, 지역 드롭다운은 실제 데이터(`districts.js`)를 그대로 써서 동작한다.
+
+**(구)Cloud Run 운영 — 도메인만 뗐고 서비스는 살아 있다:** Cloud Run 서비스 `hazard-fighter`(asia-southeast1, GCP 프로젝트 `hazard-fighter`)는 **삭제하지 않았다.** 2026-09-04 에 도메인 매핑만 해제해서 이제 `https://hazard-fighter-6zftkskdma-as.a.run.app` 로만 닿는다. **Cloud Run 은 요청 기반 과금이라 아무도 안 찾아오면 비용이 0** 이므로 남겨두는 대가가 없고, 되살릴 때 리비전의 환경변수를 그대로 승계할 수 있다. 되살리는 법: `gcloud run deploy hazard-fighter --source . --region asia-southeast1` → Pages 커스텀 도메인 제거 → `gcloud beta run domain-mappings create --service hazard-fighter --domain hazard.peterju.cloud --region asia-southeast1`. DB 는 Neon(싱가포르) — 앱이 안 불리면 깨어나지도 않는다. 수집은 Cloud Scheduler `hazard-ingest`(asia-southeast1, 10분 주기, `X-Ingest-Token` 헤더) — **2026-08-23 부터 `PAUSED`**(위 ⏸️ 항목 참고, 재개 전 조건 있음). 프로덕션은 `DOCS_ENABLED=0`(API 문서·스키마 비공개, 2026-08-28부터). 환경변수 일괄 갱신은 `.env`→YAML 스크립트(학습노트 07-27 참고). 스키마 변경 시 배포 전에 Neon direct 주소로 `alembic upgrade head` 1회. **hrfco(홍수통제소)는 해외 IP 차단으로 클라우드에서 타임아웃** — 수용 결정(학습노트 07-27). (구)로컬 터널 운영: named tunnel `hazard-fighter` 설정은 `~/.cloudflared/` 에 남아 있으나 DNS 가 더 이상 터널을 가리키지 않음. 구글/카카오 콘솔엔 localhost 와 hazard.peterju.cloud 콜백이 둘 다 등록돼 있고 **콘솔 수정 없이 그대로 유효**(도메인 유지 덕) — 되살릴 때 손댈 필요 없다.
 
 **소셜 로그인 실검증 완료(07-23):** 구글·카카오 실계정 로그인 데스크톱 검증됨. 콘솔 함정 기록 — 카카오 개편 콘솔은 Redirect URI 가 "카카오 로그인" 메뉴가 아니라 **앱 키(REST API 키)별 설정**에 있고, Client Secret 이 기본 활성이라 .env 에 KAKAO_CLIENT_SECRET 필수(없으면 KOE010).
 
@@ -86,6 +90,7 @@ app/risk/matrix.py  Layer 1 결정론적 규칙 매트릭스
 app/static/*        웹 PWA 구독 화면 (순수 HTML+JS, GET /app 으로 서빙 — 빌드 도구 없음)
 app/api/routes/web.py  /app·/firebase-config·동적 서비스워커(/firebase-messaging-sw.js) 서빙
 app/scheduler.py    10분 주기 백그라운드 수집 루프 (lifespan에서 기동)
+static-site/        Cloudflare Pages 로 배포하는 정적 데모 (2026-09-04~) — 서버 없이 화면만 재현
 app/models/*        SQLAlchemy 모델 12개 (types.py = 다이얼렉트 호환 타입)
 app/logging_utils.py 로그 시크릿 마스킹 필터
 ```

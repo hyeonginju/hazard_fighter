@@ -11,6 +11,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["SCHEDULER_ENABLED=false", ".venv/bin/uvicorn", "app.main:app", "--port", "8000"],
       "port": 8000
+    },
+    {
+      "name": "static-demo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "static-site"],
+      "port": 8080
     }
   ]
 }

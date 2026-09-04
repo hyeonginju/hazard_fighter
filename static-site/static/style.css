@@ -1,0 +1,230 @@
+/* 시켜줘, 명예소방관 — 모바일 우선 최소 스타일 */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  background: #faf7f5;
+  color: #222;
+  line-height: 1.5;
+}
+header {
+  background: #c62828;
+  color: #fff;
+  padding: 1.2rem 1rem;
+  text-align: center;
+}
+header h1 { margin: 0; font-size: 1.4rem; }
+.subtitle { margin: 0.3rem 0 0; opacity: 0.9; font-size: 0.9rem; }
+
+main { max-width: 480px; margin: 0 auto; padding: 1rem; }
+section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.hint { font-size: 0.85rem; color: #666; margin: 0 0 0.8rem; }
+
+form { display: flex; flex-direction: column; gap: 0.6rem; }
+.field-label { font-size: 0.85rem; font-weight: 700; color: #444; margin-top: 0.4rem; }
+[hidden] { display: none !important; } /* 커스텀 display 가 hidden 속성을 덮지 않게 */
+input[type="text"], input[type="email"], select {
+  padding: 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+fieldset {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+legend { font-size: 0.85rem; color: #666; }
+fieldset label { display: flex; align-items: center; gap: 0.3rem; }
+
+button {
+  padding: 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: #c62828;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+button:disabled { background: #bbb; cursor: not-allowed; }
+button.small { font-size: 0.75rem; padding: 0.2rem 0.6rem; vertical-align: middle; }
+
+.status { font-size: 0.85rem; color: #444; margin: 0.6rem 0 0; }
+
+/* 로그인 사용자 바 */
+#user-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #555;
+  padding: 0.2rem 0.2rem 0.8rem;
+}
+#user-bar button { background: #999; }
+
+/* 소셜 로그인 버튼 */
+.login-card { text-align: center; }
+.social-btn {
+  display: block;
+  padding: 0.8rem;
+  border-radius: 8px;
+  margin: 0.6rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.social-btn.kakao { background: #fee500; color: #191919; }
+.social-btn.google { background: #fff; color: #333; border: 1px solid #ccc; }
+.last-badge { display: block; font-weight: 400; font-size: 0.75rem; margin-top: 0.2rem; opacity: 0.75; }
+
+/* 인앱 브라우저 안내 배너 (inapp.js) */
+.notice {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 12px;
+  padding: 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.notice p { margin: 0 0 0.6rem; }
+.notice button { width: 100%; background: #8d6e00; font-size: 0.9rem; }
+
+.card-list { list-style: none; padding: 0; margin: 0.8rem 0 0; }
+.card-list li {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+.card-list li small { display: block; color: #888; margin-top: 0.2rem; }
+.card-list li.empty { color: #999; border: none; text-align: center; }
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+  background: #999;
+  margin-right: 0.3rem;
+}
+.risk-HIGH .badge { background: #c62828; }
+.risk-MEDIUM .badge { background: #ef6c00; }
+.risk-LOW .badge { background: #2e7d32; }
+.risk-HIGH { border-left: 4px solid #c62828; }
+.risk-MEDIUM { border-left: 4px solid #ef6c00; }
+
+footer { text-align: center; font-size: 0.8rem; color: #999; padding: 1rem; }
+footer a { color: inherit; }
+
+/* ---------- 정적 데모 전용 (운영 인스턴스 중지 후 추가) ---------- */
+
+/* 모든 화면 상단에 붙는 데모 고지 — 실제 서비스로 오인하지 않게 한다 */
+.demo-banner {
+  background: #263238;
+  color: #eceff1;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  padding: 0.7rem 1rem;
+  text-align: center;
+}
+.demo-banner strong { color: #ffd54f; }
+.demo-banner a { color: #90caf9; }
+
+/* 랜딩 (/) */
+.landing { max-width: 640px; }
+.landing section { padding: 1.2rem; }
+.landing h2 { font-size: 1.15rem; margin-bottom: 0.7rem; }
+.landing p { margin: 0 0 0.8rem; }
+.landing p:last-child { margin-bottom: 0; }
+
+.lead {
+  font-size: 0.95rem;
+  color: #37474f;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.metrics li {
+  background: #faf7f5;
+  border-radius: 8px;
+  padding: 0.7rem;
+  text-align: center;
+}
+.metrics b { display: block; font-size: 1.25rem; color: #c62828; }
+.metrics span { font-size: 0.78rem; color: #666; }
+
+.stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.stack li {
+  font-size: 0.75rem;
+  background: #eceff1;
+  color: #37474f;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+}
+
+.flow {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  counter-reset: step;
+}
+.flow li {
+  position: relative;
+  padding: 0.5rem 0 0.5rem 1.9rem;
+  border-bottom: 1px solid #f0eceb;
+}
+.flow li:last-child { border-bottom: none; }
+.flow li::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: #c62828;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flow b { color: #222; }
+.flow small { display: block; color: #777; margin-top: 0.1rem; }
+
+.btn-link {
+  display: block;
+  text-align: center;
+  background: #c62828;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.8rem;
+  border-radius: 8px;
+}
+.btn-link.secondary { background: #546e7a; }
+
+/* 데모 화면에서 눌린 버튼이 남기는 안내 */
+.demo-hint { color: #8d6e00; }

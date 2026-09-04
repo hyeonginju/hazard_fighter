@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>시켜줘, 명예소방관 — 공공데이터 기반 개인 맞춤형 재난 알림</title>
+  <meta name="description" content="기상특보·지진·홍수·긴급재난문자 4종 공공 API를 하나의 파이프라인으로 묶어, 개인의 상황에 맞춰 위험도를 판단하고 구독자에게 푸시를 보내는 백엔드." />
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#c62828" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="demo-banner">
+    <strong>정적 데모입니다.</strong> 운영 인스턴스는 비용 판단에 따라 중지했습니다 — 실사용자가 없는 상태에서
+    상시 가동은 지출만 발생시키기 때문입니다. 아래 화면은 실제 UI를 샘플 데이터로 재현한 것입니다.
+  </div>
+
+  <header>
+    <h1>🚨 시켜줘, 명예소방관</h1>
+    <p class="subtitle">공공데이터 기반 개인 맞춤형 이상상황 알림</p>
+  </header>
+
+  <main class="landing">
+    <section>
+      <p class="lead">
+        믿을 수 있는 재난 데이터는 이미 국가가 만들고 있습니다. 진짜 문제는 그 데이터를
+        <b>제때, 위험한 사람에게, 알아듣게</b> 전달하는 일이었습니다.
+      </p>
+      <p class="lead">
+        기상특보·지진·홍수·긴급재난문자 <b>4종 공공 API를 하나의 파이프라인으로 묶어</b>,
+        개인의 상황(나이대·건강 상태·활동 특성)에 맞춰 위험도를 판단하고
+        <b>구독한 사람에게만 푸시</b>를 보내는 백엔드입니다.
+        설계·컨테이너화·클라우드 배포·운영까지 1인으로 진행했습니다.
+      </p>
+    </section>
+
+    <section>
+      <h2>지표</h2>
+      <ul class="metrics">
+        <li><b>4종</b><span>공공 API 통합</span></li>
+        <li><b>147개</b><span>테스트 (외부 의존 없이 실행)</span></li>
+        <li><b>0.3초</b><span>웜 응답 실측</span></li>
+        <li><b>1인</b><span>기획·개발·인프라·운영</span></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>데이터 흐름</h2>
+      <ol class="flow">
+        <li><b>수집</b><small>기상특보·지진·홍수통제소·긴급재난문자 — 소스별 에러 격리, 중복 제거</small></li>
+        <li><b>지역 매칭</b><small>행정구역명과 기상청 예보구역명을 이름 기반으로 연결</small></li>
+        <li><b>위험도 판단</b><small>결정론적 규칙 매트릭스로 1차, 규칙 밖만 LLM 보조 판단</small></li>
+        <li><b>문구 생성</b><small>개인 특성에 맞춘 LLM 생성 — 실패 시 3단 폴백으로 템플릿까지 내려감</small></li>
+        <li><b>발송</b><small>FCM 웹푸시. 생성과 발송을 분리해 중복 발송을 막음</small></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>기술 스택</h2>
+      <ul class="stack">
+        <li>FastAPI</li><li>PostgreSQL</li><li>SQLAlchemy</li><li>Alembic</li>
+        <li>Docker</li><li>GCP Cloud Run</li><li>Cloud Scheduler</li><li>Neon</li>
+        <li>FCM 웹푸시</li><li>OAuth (구글·카카오)</li><li>JWT</li><li>LLM</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>화면 둘러보기</h2>
+      <p class="hint">실제 UI를 샘플 데이터로 재현했습니다. 입력과 발송은 동작하지 않습니다.</p>
+      <p><a class="btn-link" href="/app">구독 화면 보기</a></p>
+      <p><a class="btn-link secondary" href="/login">로그인 화면 보기</a></p>
+    </section>
+
+    <section>
+      <h2>왜 껐나</h2>
+      <p class="hint" style="margin-bottom:0">
+        배포 후 한 달간 운영하며 두 가지를 관측했습니다 — 10분 주기 수집 크론이 DB의 유휴 자동정지를
+        무력화해 무료 한도를 23일 만에 80% 소진했고, 공공 API 서버가 클라우드의 나가는 IP를 차단해
+        수집이 멈췄습니다. 실사용자가 0명인 상태에서 <b>차단 우회에 드는 비용보다 규명 기록이 더
+        가치 있다</b>고 판단해 수집을 중단했고, 이후 서비스 자체도 정적 데모로 전환했습니다.
+        끄는 판단도 운영의 일부라고 봅니다.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    <p>공공데이터 기반 개인 맞춤형 이상상황 알림 · 사이드 프로젝트</p>
+  </footer>
+</body>
+</html>
